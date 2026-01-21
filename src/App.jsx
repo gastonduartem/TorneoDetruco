@@ -510,7 +510,7 @@ function RulesPage() {
           <h2>Puntaje</h2>
           <ul>
             <li>Partido ganado: +1 victoria.</li>
-            <li>Partido perdido: 0 victoria.</li>
+            <li>Partido perdido: 0 victorias.</li>
           </ul>
         </section>
         <section className="rules-section">
