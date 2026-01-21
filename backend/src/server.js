@@ -101,32 +101,49 @@ app.get('/api/admin/inscriptions', requireAuth, async (req, res) => {
 app.post('/api/inscriptions', async (req, res) => {
   const { fullName, phone, email } = req.body || {};
 
-  if (!fullName || !phone || !email) {
-    return res.status(400).json({ message: 'Faltan datos.' });
+  try {
+    if (!fullName || !phone || !email) {
+      return res.status(400).json({ message: 'Faltan datos.' });
+    }
+
+    const { data: existing, error: existingError } = await supabase
+      .from('inscriptions')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (existingError) {
+      console.error('Error verificando email existente:', existingError);
+      return res.status(500).json({
+        message: existingError.message || 'Error verificando email.'
+      });
+    }
+
+    if (existing) {
+      return res.status(409).json({ message: 'Email ya registrado.' });
+    }
+
+    const { error: insertError } = await supabase.from('inscriptions').insert({
+      full_name: fullName,
+      phone,
+      email,
+      status: 'pendiente'
+    });
+
+    if (insertError) {
+      console.error('Error guardando inscripcion:', insertError);
+      return res.status(500).json({
+        message: insertError.message || 'No se pudo guardar la inscripcion.'
+      });
+    }
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('Error inesperado en inscripcion:', error);
+    return res.status(500).json({
+      message: error?.message || 'Error inesperado en inscripcion.'
+    });
   }
-
-  const { data: existing } = await supabase
-    .from('inscriptions')
-    .select('id')
-    .eq('email', email)
-    .maybeSingle();
-
-  if (existing) {
-    return res.status(409).json({ message: 'Email ya registrado.' });
-  }
-
-  const { error: insertError } = await supabase.from('inscriptions').insert({
-    full_name: fullName,
-    phone,
-    email,
-    status: 'pendiente'
-  });
-
-  if (insertError) {
-    return res.status(500).json({ message: 'No se pudo guardar la inscripcion.' });
-  }
-
-  return res.json({ ok: true });
 });
 
 app.post('/api/admin/inscriptions/:id/paid', requireAuth, async (req, res) => {
