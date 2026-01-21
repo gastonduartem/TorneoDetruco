@@ -307,6 +307,10 @@ button:disabled {
   background: rgba(255, 255, 255, 0.15);
 }
 
+.alert.success {
+  background: rgba(35, 125, 60, 0.85);
+}
+
 .confirmation {
   display: grid;
   gap: 12px;
@@ -402,11 +406,17 @@ footer a {
 
 .table-row {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   padding: 12px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
+}
+
+.table-row span,
+.table-row a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .table-row.header {
@@ -421,8 +431,32 @@ footer a {
 }
 
 @media (max-width: 720px) {
+  .table-row.header {
+    display: none;
+  }
+
   .table-row {
     grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 720px) {
+  .table-cell {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .table-cell::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--gold-strong);
+  }
+
+  .tag-button.table-cell {
+    justify-content: flex-end;
   }
 }
 

@@ -25,11 +25,6 @@ Variables:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `SMTP_HOST` (default: `smtp.gmail.com`)
-- `SMTP_PORT` (default: `465`)
-- `SMTP_USER`
-- `SMTP_PASS` (App Password de Gmail)
-- `EMAIL_FROM`
 - `ADMIN_USER`
 - `ADMIN_PASS`
 - `ADMIN_JWT_SECRET`
@@ -42,4 +37,4 @@ Variables:
 
 ## Admin
 
-Ir a `/admin`, loguearse y cargar la lista de inscriptos. Se muestran links a los comprobantes y un boton para enviar el email de confirmacion final.
+Ir a `/admin`, loguearse y cargar la lista de inscriptos. Se pueden eliminar inscripciones.

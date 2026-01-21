@@ -10,9 +10,8 @@ const steps = [
 ];
 
 const initialForm = {
-  fullName: '',
-  phone: '',
-  email: ''
+  name: '',
+  phone: ''
 };
 
 function LandingHeader() {
@@ -117,7 +116,7 @@ function SignupFlow() {
   const [form, setForm] = useState(initialForm);
   const [status, setStatus] = useState({ type: 'idle', message: '' });
 
-  const canContinue = form.fullName && form.phone && form.email;
+  const canContinue = form.name && form.phone;
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -130,9 +129,8 @@ function SignupFlow() {
 
     try {
       const payload = {
-        fullName: form.fullName.trim(),
-        phone: form.phone.trim(),
-        email: form.email.trim().toLowerCase()
+        name: form.name.trim(),
+        phone: form.phone.trim()
       };
 
       const response = await fetch(`${API_BASE}/api/inscriptions`, {
@@ -140,14 +138,6 @@ function SignupFlow() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-
-      if (response.status === 409) {
-        setStatus({
-          type: 'error',
-          message: 'Ese email ya fue registrado. Usa otro correo.'
-        });
-        return;
-      }
 
       if (!response.ok) {
         const info = await response.json().catch(() => ({}));
@@ -191,35 +181,24 @@ function SignupFlow() {
           }}
         >
           <label>
-            Nombre completo
+            Nombre o apodo
             <input
               type="text"
-              name="fullName"
-              value={form.fullName}
+              name="name"
+              value={form.name}
               onChange={handleChange}
-              placeholder="Ej: Gaston Duarte"
+              placeholder="Ej: Gaston"
               required
             />
           </label>
           <label>
-            Celular
+            Numero
             <input
               type="tel"
               name="phone"
               value={form.phone}
               onChange={handleChange}
               placeholder="Ej: 0981 123456"
-              required
-            />
-          </label>
-          <label>
-            Email
-            <input
-              type="email"
-              name="email"
-              value={form.email}
-              onChange={handleChange}
-              placeholder="Ej: gaston@gmail.com"
               required
             />
           </label>
@@ -269,15 +248,14 @@ function SignupFlow() {
         <div className="confirmation">
           <h3>Inscripcion realizada</h3>
           <p>
-            Te enviamos un email confirmando la carga. La validacion final del
-            comprobante llegara por correo.
+            Tu inscripcion fue realizada con exito.
           </p>
           <div className="summary">
             <p>
-              <strong>Nombre:</strong> {form.fullName}
+              <strong>Nombre:</strong> {form.name}
             </p>
             <p>
-              <strong>Email:</strong> {form.email}
+              <strong>Numero:</strong> {form.phone}
             </p>
           </div>
         </div>
@@ -335,73 +313,33 @@ function AdminPage() {
       }
 
       const data = await response.json();
-        setInscriptions(data);
-        setStatus({ type: 'success', message: '' });
+      setInscriptions(data);
+      setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     }
   }, [token]);
 
-  const handlePaidToggle = useCallback(
-    async (id, paid) => {
-      if (!token) return;
-      setStatus({ type: 'loading', message: 'Actualizando pago...' });
-      try {
-        const response = await fetch(
-          `${API_BASE}/api/admin/inscriptions/${id}/paid`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ paid })
-          }
-        );
-
-        if (!response.ok) {
-          const info = await response.json().catch(() => ({}));
-          throw new Error(info?.message || 'No se pudo actualizar el pago.');
-        }
-
-        setInscriptions((prev) =>
-          prev.map((item) =>
-            item.id === id ? { ...item, paid } : item
-          )
-        );
-        setStatus({ type: 'success', message: '' });
-      } catch (error) {
-        setStatus({ type: 'error', message: error.message });
-      }
-    },
-    [token]
-  );
-
-  const handleConfirm = useCallback(
+  const handleDelete = useCallback(
     async (id) => {
       if (!token) return;
-      setStatus({ type: 'loading', message: 'Enviando confirmacion...' });
+      if (!window.confirm('Eliminar esta inscripcion?')) return;
+      setStatus({ type: 'loading', message: 'Eliminando inscripcion...' });
       try {
         const response = await fetch(
-          `${API_BASE}/api/admin/inscriptions/${id}/confirm`,
+          `${API_BASE}/api/admin/inscriptions/${id}`,
           {
-            method: 'POST',
+            method: 'DELETE',
             headers: { Authorization: `Bearer ${token}` }
           }
         );
 
         if (!response.ok) {
           const info = await response.json().catch(() => ({}));
-          throw new Error(info?.message || 'No se pudo enviar el email.');
+          throw new Error(info?.message || 'No se pudo eliminar.');
         }
 
-        setInscriptions((prev) =>
-          prev.map((item) =>
-            item.id === id
-              ? { ...item, confirmed_at: new Date().toISOString() }
-              : item
-          )
-        );
+        setInscriptions((prev) => prev.filter((item) => item.id !== id));
         setStatus({ type: 'success', message: '' });
       } catch (error) {
         setStatus({ type: 'error', message: error.message });
@@ -471,35 +409,24 @@ function AdminPage() {
           <div className="table">
             <div className="table-row header">
               <span>Nombre</span>
-              <span>Email</span>
-              <span>Celular</span>
-              <span>Pago</span>
-              <span>Confirmacion</span>
+              <span>Numero</span>
+              <span>Acciones</span>
             </div>
             {inscriptions.map((item) => (
               <div className="table-row" key={item.id}>
-                <span>{item.full_name}</span>
-                <span>{item.email}</span>
-                <span>{item.phone}</span>
-                <label className="paid-toggle">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(item.paid)}
-                    onChange={(event) =>
-                      handlePaidToggle(item.id, event.target.checked)
-                    }
-                  />
-                  <span>{item.paid ? 'Pagado' : 'Pendiente'}</span>
-                </label>
+                <span className="table-cell" data-label="Nombre">
+                  {item.name}
+                </span>
+                <span className="table-cell" data-label="Numero">
+                  {item.phone}
+                </span>
                 <button
                   type="button"
-                  className={`tag-button ${
-                    item.confirmed_at ? 'success' : ''
-                  }`}
-                  onClick={() => handleConfirm(item.id)}
-                  disabled={Boolean(item.confirmed_at)}
+                  className="tag-button table-cell danger"
+                  data-label="Acciones"
+                  onClick={() => handleDelete(item.id)}
                 >
-                  {item.confirmed_at ? 'Confirmado' : 'Enviar email'}
+                  Eliminar
                 </button>
               </div>
             ))}
