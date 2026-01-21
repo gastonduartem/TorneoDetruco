@@ -523,9 +523,9 @@ function RulesPage() {
           </ul>
         </section>
         <section className="rules-section">
-          <h2>Semifinales y final</h2>
+          <h2>Fase final</h2>
           <ul>
-            <li>Semifinales: 1° vs 4°, 2° vs 3°</li>
+            <li> 1° vs 4°, 2° vs 3°</li>
             <li>(Depende de la cantidad de equipos)</li>
             <li>Partidos a 30 puntos.</li>
             <li>Eliminacion directa.</li>
