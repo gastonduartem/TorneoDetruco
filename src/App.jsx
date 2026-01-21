@@ -83,7 +83,6 @@ function PaymentInfo() {
           <strong>Banco:</strong> Ueno Bank
         </li>
       </ul>
-      <p className="note">Subi el comprobante en este paso.</p>
     </div>
   );
 }
