@@ -28,6 +28,101 @@ app.use(
 );
 app.use(express.json());
 
+const shuffle = (items) => {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+};
+
+const roundRobin = (teamIds) => {
+  const teams = [...teamIds];
+  const hasBye = teams.length % 2 !== 0;
+  if (hasBye) teams.push(null);
+  const totalRounds = teams.length - 1;
+  const half = teams.length / 2;
+  const rounds = [];
+
+  for (let round = 0; round < totalRounds; round += 1) {
+    const matches = [];
+    for (let i = 0; i < half; i += 1) {
+      const home = teams[i];
+      const away = teams[teams.length - 1 - i];
+      if (home && away) {
+        matches.push({ home, away });
+      }
+    }
+    rounds.push(matches);
+    const fixed = teams[0];
+    const rotated = teams.slice(1);
+    rotated.unshift(rotated.pop());
+    teams.splice(0, teams.length, fixed, ...rotated);
+  }
+
+  return rounds;
+};
+
+const getTournamentState = async () => {
+  const { data: tournament } = await supabase
+    .from('tournaments')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!tournament) {
+    return { tournament: null };
+  }
+
+  const [participants, teams, groups, groupTeams, matches, bracketMatches] =
+    await Promise.all([
+      supabase
+        .from('tournament_participants')
+        .select('*')
+        .eq('tournament_id', tournament.id)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('tournament_teams')
+        .select('*')
+        .eq('tournament_id', tournament.id)
+        .order('seed_index', { ascending: true }),
+      supabase
+        .from('tournament_groups')
+        .select('*')
+        .eq('tournament_id', tournament.id)
+        .order('group_index', { ascending: true }),
+      supabase
+        .from('tournament_group_teams')
+        .select('*')
+        .eq('tournament_id', tournament.id)
+        .order('slot_index', { ascending: true }),
+      supabase
+        .from('tournament_matches')
+        .select('*')
+        .eq('tournament_id', tournament.id)
+        .order('round_index', { ascending: true })
+        .order('match_index', { ascending: true }),
+      supabase
+        .from('tournament_bracket_matches')
+        .select('*')
+        .eq('tournament_id', tournament.id)
+        .order('round_index', { ascending: true })
+        .order('match_index', { ascending: true })
+    ]);
+
+  return {
+    tournament,
+    participants: participants.data || [],
+    teams: teams.data || [],
+    groups: groups.data || [],
+    groupTeams: groupTeams.data || [],
+    matches: matches.data || [],
+    bracketMatches: bracketMatches.data || []
+  };
+};
+
 const requireAuth = (req, res, next) => {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.replace('Bearer ', '');

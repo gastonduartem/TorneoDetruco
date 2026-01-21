@@ -554,11 +554,37 @@ function RulesPage() {
         <section className="rules-section">
           <h2>Fase final</h2>
           <ul>
-            <li> 1° vs 4°, 2° vs 3°</li>
-            <li>(Depende de la cantidad de equipos)</li>
-            <li>Partidos a 30 puntos.</li>
-            <li>Eliminacion directa.</li>
+            <li>
+              <strong>Clasificación</strong>
+              <ul>
+                <li>Clasifican <strong>uno menos</strong> que el tamaño del grupo.</li>
+                <li>
+                  Si los grupos son desparejos, clasifican la <strong>misma cantidad</strong> en todos:
+                  <ul>
+                    <li>Ejemplo: grupos de 4 y 5 → clasifican 3 de cada grupo.</li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+            <li>
+              <strong>Eliminación</strong>
+              <ul>
+                <li>Eliminación directa</li>
+                <li>
+                  <strong>Cruces</strong> (Grupo A vs Grupo B):
+                  <ul>
+                    <li>A1 vs B4</li>
+                    <li>A3 vs B2</li>
+                    <li>A2 vs B3</li>
+                    <li>A4 vs B1</li>
+                  </ul>
+                </li>
+                <li>Partidos a <strong>30 puntos</strong>.</li>
+                <li>Hay partido por <strong>3er / 4to puesto</strong>.</li>
+              </ul>
+            </li>
           </ul>
+
         </section>
         <a className="map-button" href="/">
           Volver al inicio
