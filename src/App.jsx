@@ -74,6 +74,9 @@ function PaymentInfo() {
           <strong>Alias:</strong> 5895986
         </li>
         <li>
+          <strong>Nombre:</strong> Gaston Duarte
+        </li>
+        <li>
           <strong>Cedula:</strong> 5895986
         </li>
         <li>
