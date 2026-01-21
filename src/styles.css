@@ -288,6 +288,11 @@ button.ghost {
   color: var(--text);
 }
 
+button.ghost.danger {
+  border-color: rgba(190, 70, 70, 0.8);
+  color: #f2b0b0;
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -398,6 +403,11 @@ footer a {
   align-items: center;
 }
 
+.admin-actions .ghost.active {
+  border-color: var(--gold-strong);
+  color: var(--gold-strong);
+}
+
 .table {
   margin-top: 20px;
   display: grid;
@@ -477,6 +487,11 @@ footer a {
   border-color: rgba(60, 170, 90, 0.9);
 }
 
+.tag-button.danger {
+  background: rgba(130, 25, 25, 0.75);
+  border-color: rgba(190, 70, 70, 0.8);
+}
+
 .paid-toggle {
   display: inline-flex;
   align-items: center;
@@ -486,4 +501,125 @@ footer a {
 
 .paid-toggle input {
   accent-color: var(--gold-strong);
+}
+
+.tournament {
+  margin-top: 24px;
+  display: grid;
+  gap: 20px;
+}
+
+.tournament-card {
+  background: rgba(10, 7, 4, 0.88);
+  border-radius: 18px;
+  padding: 24px;
+  border: 1px solid rgba(240, 195, 108, 0.4);
+  display: grid;
+  gap: 18px;
+}
+
+.tournament-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.tournament-step {
+  display: grid;
+  gap: 16px;
+}
+
+.highlight-card {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-weight: 600;
+  width: fit-content;
+}
+
+.team-list {
+  display: grid;
+  gap: 10px;
+}
+
+.team-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.team-preview {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.groups-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.group-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.group-card ul {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 6px;
+}
+
+.rounds {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.round-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.match-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 40px 80px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.match-row input {
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.table.compact .table-row {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+@media (min-width: 768px) {
+  .groups-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .match-row {
+    grid-template-columns: 1fr 60px 30px 60px 1fr;
+  }
 }

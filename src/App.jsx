@@ -14,6 +14,124 @@ const initialForm = {
   phone: ''
 };
 
+const buildStandings = (teams, matches) => {
+  const stats = {};
+  teams.forEach((team) => {
+    stats[team.id] = {
+      team,
+      wins: 0,
+      losses: 0,
+      pointsFor: 0,
+      pointsAgainst: 0,
+      diff: 0
+    };
+  });
+
+  matches.forEach((match) => {
+    if (match.home_score === null || match.away_score === null) return;
+    const home = stats[match.home_team_id];
+    const away = stats[match.away_team_id];
+    if (!home || !away) return;
+
+    home.pointsFor += match.home_score;
+    home.pointsAgainst += match.away_score;
+    away.pointsFor += match.away_score;
+    away.pointsAgainst += match.home_score;
+    home.diff = home.pointsFor - home.pointsAgainst;
+    away.diff = away.pointsFor - away.pointsAgainst;
+
+    if (match.home_score > match.away_score) {
+      home.wins += 1;
+      away.losses += 1;
+    } else if (match.away_score > match.home_score) {
+      away.wins += 1;
+      home.losses += 1;
+    }
+  });
+
+  const list = Object.values(stats);
+  const grouped = list.reduce((acc, entry) => {
+    const key = entry.wins;
+    acc[key] = acc[key] || [];
+    acc[key].push(entry);
+    return acc;
+  }, {});
+
+  const winGroups = Object.keys(grouped)
+    .map(Number)
+    .sort((a, b) => b - a)
+    .flatMap((wins) => {
+      const group = grouped[wins];
+      const sorted = group.sort((a, b) => {
+        if (b.diff !== a.diff) return b.diff - a.diff;
+        if (group.length > 2 && b.pointsFor !== a.pointsFor) {
+          return b.pointsFor - a.pointsFor;
+        }
+        if (group.length > 2 && a.pointsAgainst !== b.pointsAgainst) {
+          return a.pointsAgainst - b.pointsAgainst;
+        }
+        return 0;
+      });
+
+      if (group.length === 2 && sorted[0].diff === sorted[1].diff) {
+        const [first, second] = sorted;
+        const headToHead = matches.find(
+          (match) =>
+            (match.home_team_id === first.team.id &&
+              match.away_team_id === second.team.id) ||
+            (match.home_team_id === second.team.id &&
+              match.away_team_id === first.team.id)
+        );
+        if (headToHead && headToHead.home_score !== null && headToHead.away_score !== null) {
+          const winnerId =
+            headToHead.home_score > headToHead.away_score
+              ? headToHead.home_team_id
+              : headToHead.away_team_id;
+          return winnerId === first.team.id ? [first, second] : [second, first];
+        }
+      }
+
+      return sorted;
+    });
+
+  return winGroups;
+};
+
+const nextPowerOfTwo = (value) => {
+  let power = 1;
+  while (power < value) power *= 2;
+  return power;
+};
+
+const buildBracketMatches = (groupRankings) => {
+  const groupKeys = Object.keys(groupRankings);
+  if (groupKeys.length === 2 && groupRankings[groupKeys[0]].length >= 4) {
+    const [groupA, groupB] = groupKeys;
+    const a = groupRankings[groupA];
+    const b = groupRankings[groupB];
+    return [
+      { home: a[0].team, away: b[3].team },
+      { home: a[2].team, away: b[1].team },
+      { home: a[1].team, away: b[2].team },
+      { home: a[3].team, away: b[0].team }
+    ];
+  }
+
+  const seeds = groupKeys
+    .flatMap((groupKey) => groupRankings[groupKey])
+    .map((entry) => entry.team);
+
+  const size = nextPowerOfTwo(seeds.length);
+  const padded = [...seeds];
+  while (padded.length < size) padded.push(null);
+
+  const matches = [];
+  for (let i = 0; i < padded.length; i += 2) {
+    matches.push({ home: padded[i], away: padded[i + 1] });
+  }
+  return matches;
+};
+
 function LandingHeader() {
   return (
     <header className="site-header">
@@ -264,6 +382,13 @@ function AdminPage() {
   const [token, setToken] = useState(() => localStorage.getItem('adminToken'));
   const [status, setStatus] = useState({ type: 'idle', message: '' });
   const [inscriptions, setInscriptions] = useState([]);
+  const [adminTab, setAdminTab] = useState('inscriptions');
+  const [tournamentState, setTournamentState] = useState(null);
+  const [lastDraw, setLastDraw] = useState(null);
+  const [pendingMember, setPendingMember] = useState(null);
+  const [groupChoice, setGroupChoice] = useState(null);
+  const [matchInputs, setMatchInputs] = useState({});
+  const [bracketInputs, setBracketInputs] = useState({});
 
   const handleLogin = async (event) => {
     event.preventDefault();
@@ -293,6 +418,7 @@ function AdminPage() {
     localStorage.removeItem('adminToken');
     setToken(null);
     setInscriptions([]);
+    setTournamentState(null);
   };
 
   const fetchInscriptions = useCallback(async () => {
@@ -314,6 +440,368 @@ function AdminPage() {
       setStatus({ type: 'error', message: error.message });
     }
   }, [token]);
+
+  const fetchTournament = useCallback(async () => {
+    if (!token) return;
+    setStatus({ type: 'loading', message: 'Cargando torneo...' });
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/tournament`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        throw new Error('No se pudo cargar el torneo.');
+      }
+      const data = await response.json();
+      setTournamentState(data);
+      setLastDraw(null);
+      setPendingMember(
+        data.tournament?.pending_member_id
+          ? data.participants.find(
+              (participant) =>
+                participant.id === data.tournament.pending_member_id
+            )
+          : null
+      );
+      setStatus({ type: 'success', message: '' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }, [token]);
+
+  const startTournament = useCallback(async () => {
+    if (!token) return;
+    setStatus({ type: 'loading', message: 'Creando torneo...' });
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/tournament/start`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'No se pudo iniciar el torneo.');
+      }
+      setTournamentState(data);
+      setLastDraw(null);
+      setPendingMember(
+        data.tournament?.pending_member_id
+          ? data.participants.find(
+              (participant) =>
+                participant.id === data.tournament.pending_member_id
+            )
+          : null
+      );
+      setStatus({ type: 'success', message: '' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }, [token]);
+
+  const resetTournament = useCallback(async () => {
+    if (!token) return;
+    if (!window.confirm('Reiniciar torneo y borrar todo?')) return;
+    setStatus({ type: 'loading', message: 'Reiniciando torneo...' });
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/tournament/reset`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        throw new Error('No se pudo reiniciar el torneo.');
+      }
+      setTournamentState(null);
+      setLastDraw(null);
+      setPendingMember(null);
+      setGroupChoice(null);
+      setMatchInputs({});
+      setBracketInputs({});
+      setStatus({ type: 'success', message: '' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }, [token]);
+
+  const drawHead = useCallback(async () => {
+    if (!token) return;
+    setStatus({ type: 'loading', message: 'Girando ruleta...' });
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/tournament/draw-head`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'No se pudo girar.');
+      }
+      setTournamentState(data);
+      setLastDraw(data.lastDraw || null);
+      setPendingMember(null);
+      setStatus({ type: 'success', message: '' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }, [token]);
+
+  const drawSecond = useCallback(async () => {
+    if (!token) return;
+    setStatus({ type: 'loading', message: 'Girando ruleta...' });
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/admin/tournament/draw-second`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'No se pudo girar.');
+      }
+      setTournamentState(data);
+      setPendingMember(data.pending || null);
+      setStatus({ type: 'success', message: '' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }, [token]);
+
+  const confirmTeam = useCallback(async () => {
+    if (!token) return;
+    setStatus({ type: 'loading', message: 'Confirmando equipo...' });
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/admin/tournament/confirm-team`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'No se pudo confirmar.');
+      }
+      setTournamentState(data);
+      setPendingMember(
+        data.tournament?.pending_member_id
+          ? data.participants.find(
+              (participant) =>
+                participant.id === data.tournament.pending_member_id
+            )
+          : null
+      );
+      setStatus({ type: 'success', message: '' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }, [token]);
+
+  const nextTeam = useCallback(async () => {
+    if (!token) return;
+    setStatus({ type: 'loading', message: 'Pasando al siguiente equipo...' });
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/tournament/next-team`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'No se pudo avanzar.');
+      }
+      setTournamentState(data);
+      setStatus({ type: 'success', message: '' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }, [token]);
+
+  const drawGroups = useCallback(async () => {
+    if (!token || !groupChoice) return;
+    setStatus({ type: 'loading', message: 'Sorteando grupos...' });
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/tournament/groups`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ groupCount: groupChoice })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'No se pudieron sortear grupos.');
+      }
+      setTournamentState(data);
+      setStatus({ type: 'success', message: '' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }, [token, groupChoice]);
+
+  const saveMatch = useCallback(
+    async (matchId) => {
+      if (!token) return;
+      const scores = matchInputs[matchId];
+      if (!scores || scores.home === '' || scores.away === '') {
+        setStatus({ type: 'error', message: 'Completa ambos puntajes.' });
+        return;
+      }
+      setStatus({ type: 'loading', message: 'Guardando resultado...' });
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/admin/tournament/matches/${matchId}`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              homeScore: Number(scores.home),
+              awayScore: Number(scores.away)
+            })
+          }
+        );
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.message || 'No se pudo guardar.');
+        }
+        setTournamentState(data);
+        setStatus({ type: 'success', message: '' });
+      } catch (error) {
+        setStatus({ type: 'error', message: error.message });
+      }
+    },
+    [token, matchInputs]
+  );
+
+  const saveBracketMatch = useCallback(
+    async (matchId) => {
+      if (!token) return;
+      const scores = bracketInputs[matchId];
+      if (!scores || scores.home === '' || scores.away === '') {
+        setStatus({ type: 'error', message: 'Completa ambos puntajes.' });
+        return;
+      }
+      setStatus({ type: 'loading', message: 'Guardando resultado...' });
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/admin/tournament/bracket/${matchId}`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              homeScore: Number(scores.home),
+              awayScore: Number(scores.away)
+            })
+          }
+        );
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.message || 'No se pudo guardar.');
+        }
+        setTournamentState(data);
+        setStatus({ type: 'success', message: '' });
+      } catch (error) {
+        setStatus({ type: 'error', message: error.message });
+      }
+    },
+    [token, bracketInputs]
+  );
+
+  const createBracket = useCallback(async () => {
+    if (!token || !tournamentState?.tournament) return;
+    const teamsById = Object.fromEntries(
+      tournamentState.teams.map((team) => [team.id, team])
+    );
+    const groupTeamsByGroup = tournamentState.groupTeams.reduce((acc, entry) => {
+      acc[entry.group_id] = acc[entry.group_id] || [];
+      acc[entry.group_id].push(entry.team_id);
+      return acc;
+    }, {});
+
+    const groupRankings = {};
+    tournamentState.groups.forEach((group) => {
+      const teamIds = groupTeamsByGroup[group.id] || [];
+      const groupTeamsList = teamIds.map((id) => teamsById[id]).filter(Boolean);
+      const groupMatches = tournamentState.matches.filter(
+        (match) => match.group_id === group.id
+      );
+      groupRankings[group.name] = buildStandings(groupTeamsList, groupMatches);
+    });
+
+    const groupSizes = Object.values(groupTeamsByGroup).map((list) => list.length);
+    if (!groupSizes.length) {
+      setStatus({ type: 'error', message: 'No hay grupos cargados.' });
+      return;
+    }
+
+    const qualifyCount = Math.max(Math.min(...groupSizes) - 1, 1);
+
+    Object.keys(groupRankings).forEach((key) => {
+      groupRankings[key] = groupRankings[key].slice(0, qualifyCount);
+    });
+
+    const firstRound = buildBracketMatches(groupRankings);
+    const totalTeams = firstRound.length * 2;
+    const rounds = Math.log2(nextPowerOfTwo(totalTeams));
+    const matches = [];
+
+    for (let round = 1; round <= rounds; round += 1) {
+      const matchesInRound = totalTeams / 2 ** round;
+      for (let matchIndex = 0; matchIndex < matchesInRound; matchIndex += 1) {
+        if (round === 1) {
+          const entry = firstRound[matchIndex] || { home: null, away: null };
+          matches.push({
+            round_index: round,
+            match_index: matchIndex,
+            home_team_id: entry.home?.id || null,
+            away_team_id: entry.away?.id || null,
+            bracket_type: 'main'
+          });
+        } else {
+          matches.push({
+            round_index: round,
+            match_index: matchIndex,
+            home_team_id: null,
+            away_team_id: null,
+            bracket_type: 'main'
+          });
+        }
+      }
+    }
+
+    if (rounds >= 2) {
+      matches.push({
+        round_index: rounds - 1,
+        match_index: 0,
+        home_team_id: null,
+        away_team_id: null,
+        bracket_type: 'third_place'
+      });
+    }
+
+    setStatus({ type: 'loading', message: 'Creando llaves...' });
+    try {
+      const response = await fetch(`${API_BASE}/api/admin/tournament/bracket`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ matches })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'No se pudo crear la llave.');
+      }
+      setTournamentState(data);
+      setStatus({ type: 'success', message: '' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }, [token, tournamentState]);
 
   const handlePaidToggle = useCallback(
     async (id, paid) => {
@@ -426,8 +914,23 @@ function AdminPage() {
             <button className="ghost" onClick={handleLogout}>
               Salir
             </button>
-            <button className="primary" onClick={fetchInscriptions}>
-              Ver inscriptos
+            <button
+              className={`ghost ${adminTab === 'inscriptions' ? 'active' : ''}`}
+              onClick={() => {
+                setAdminTab('inscriptions');
+                fetchInscriptions();
+              }}
+            >
+              Inscriptos
+            </button>
+            <button
+              className={`ghost ${adminTab === 'tournament' ? 'active' : ''}`}
+              onClick={() => {
+                setAdminTab('tournament');
+                fetchTournament();
+              }}
+            >
+              Torneo
             </button>
             {status.type === 'loading' && (
               <div className="alert loading">{status.message}</div>
@@ -435,7 +938,7 @@ function AdminPage() {
           </div>
         )}
 
-        {token && inscriptions.length > 0 && (
+        {token && adminTab === 'inscriptions' && inscriptions.length > 0 && (
           <div className="table">
             <div className="table-row header">
               <span>Nombre</span>
@@ -471,6 +974,474 @@ function AdminPage() {
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {token && adminTab === 'tournament' && (
+          <div className="tournament">
+            {!tournamentState?.tournament && (
+              <div className="tournament-card">
+                <h2>Empezar torneo</h2>
+                <p>Se usaran solo los participantes con pago confirmado.</p>
+                <div className="button-row">
+                  <button className="primary" onClick={startTournament}>
+                    Empezar torneo
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {tournamentState?.tournament && (
+              <div className="tournament-card">
+                <div className="tournament-header">
+                  <h2>Panel de torneo</h2>
+                  <button className="ghost danger" onClick={resetTournament}>
+                    Reiniciar torneo
+                  </button>
+                </div>
+
+                {tournamentState.tournament.stage === 'heads' && (
+                  <div className="tournament-step">
+                    <h3>Sorteo de cabezas</h3>
+                    <p>Gira la ruleta para asignar las cabezas de equipo.</p>
+                    <button className="primary" onClick={drawHead}>
+                      Girar ruleta
+                    </button>
+                    {lastDraw && (
+                      <div className="highlight-card">
+                        {lastDraw.name} seleccionado
+                      </div>
+                    )}
+                    <div className="team-list">
+                      {tournamentState.teams.map((team) => {
+                        const head = tournamentState.participants.find(
+                          (participant) =>
+                            participant.id === team.head_participant_id
+                        );
+                        return (
+                          <div className="team-item" key={team.id}>
+                            <span>Equipo {team.seed_index + 1}</span>
+                            <strong>{head ? head.name : '---'}</strong>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {tournamentState.tournament.stage === 'seconds' && (
+                  <div className="tournament-step">
+                    <h3>Segundo integrante</h3>
+                    <p>Gira la ruleta y confirmá el equipo.</p>
+                    <button className="primary" onClick={drawSecond}>
+                      Girar ruleta
+                    </button>
+                    {pendingMember && (
+                      <div className="highlight-card">
+                        {pendingMember.name} seleccionado
+                      </div>
+                    )}
+                    {pendingMember && (
+                      <div className="team-preview">
+                        <strong>
+                          {tournamentState.participants.find(
+                            (participant) =>
+                              participant.id ===
+                              tournamentState.teams[
+                                tournamentState.tournament.current_head_index
+                              ]?.head_participant_id
+                          )?.name || '---'}{' '}
+                          & {pendingMember.name}
+                        </strong>
+                        <div className="button-row">
+                          <button className="primary" onClick={confirmTeam}>
+                            Confirmar equipo
+                          </button>
+                          <button className="ghost" onClick={nextTeam}>
+                            Pasar al siguiente equipo
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="team-list">
+                      {tournamentState.teams.map((team) => {
+                        const head = tournamentState.participants.find(
+                          (participant) =>
+                            participant.id === team.head_participant_id
+                        );
+                        const second = tournamentState.participants.find(
+                          (participant) =>
+                            participant.id === team.second_participant_id
+                        );
+                        return (
+                          <div className="team-item" key={team.id}>
+                            <span>Equipo {team.seed_index + 1}</span>
+                            <strong>
+                              {head ? head.name : '---'}{' '}
+                              {second ? `& ${second.name}` : ''}
+                            </strong>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {tournamentState.tournament.stage === 'groups' && (
+                  <div className="tournament-step">
+                    <h3>Cantidad de grupos</h3>
+                    <div className="button-row">
+                      {[2, 3, 4].map((count) => (
+                        <button
+                          key={count}
+                          className={`ghost ${groupChoice === count ? 'active' : ''}`}
+                          onClick={() => setGroupChoice(count)}
+                        >
+                          {count} grupos
+                        </button>
+                      ))}
+                      <button
+                        className="primary"
+                        onClick={drawGroups}
+                        disabled={!groupChoice}
+                      >
+                        Sortear grupos
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {tournamentState.tournament.stage === 'group_fixtures' && (
+                  <div className="tournament-step">
+                    {(() => {
+                      const allDone = tournamentState.matches.every(
+                        (match) =>
+                          match.home_score !== null && match.away_score !== null
+                      );
+                      return (
+                        <>
+                    <h3>Grupos</h3>
+                    <div className="groups-grid">
+                      {tournamentState.groups.map((group) => {
+                        const groupTeams = tournamentState.groupTeams
+                          .filter((entry) => entry.group_id === group.id)
+                          .map((entry) =>
+                            tournamentState.teams.find(
+                              (team) => team.id === entry.team_id
+                            )
+                          )
+                          .filter(Boolean);
+                        return (
+                          <div className="group-card" key={group.id}>
+                            <h4>{group.name}</h4>
+                            <ul>
+                              {groupTeams.map((team) => (
+                                <li key={team.id}>{team.name || 'Equipo'}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <h3>Fechas</h3>
+                    {tournamentState.groups.map((group) => {
+                      const groupMatches = tournamentState.matches.filter(
+                        (match) => match.group_id === group.id
+                      );
+                      const rounds = groupMatches.reduce((acc, match) => {
+                        acc[match.round_index] = acc[match.round_index] || [];
+                        acc[match.round_index].push(match);
+                        return acc;
+                      }, {});
+
+                      return (
+                        <div className="rounds" key={group.id}>
+                          <h4>{group.name}</h4>
+                          {Object.keys(rounds).map((roundKey) => (
+                            <div className="round-card" key={roundKey}>
+                              <h5>Fecha {roundKey}</h5>
+                              {rounds[roundKey].map((match) => {
+                                const homeTeam = tournamentState.teams.find(
+                                  (team) => team.id === match.home_team_id
+                                );
+                                const awayTeam = tournamentState.teams.find(
+                                  (team) => team.id === match.away_team_id
+                                );
+                                return (
+                                  <div className="match-row" key={match.id}>
+                                    <span>{homeTeam?.name || '---'}</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={
+                                        matchInputs[match.id]?.home ??
+                                        match.home_score ??
+                                        ''
+                                      }
+                                      onChange={(event) =>
+                                        setMatchInputs((prev) => ({
+                                          ...prev,
+                                          [match.id]: {
+                                            ...prev[match.id],
+                                            home: event.target.value
+                                          }
+                                        }))
+                                      }
+                                    />
+                                    <span>vs</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={
+                                        matchInputs[match.id]?.away ??
+                                        match.away_score ??
+                                        ''
+                                      }
+                                      onChange={(event) =>
+                                        setMatchInputs((prev) => ({
+                                          ...prev,
+                                          [match.id]: {
+                                            ...prev[match.id],
+                                            away: event.target.value
+                                          }
+                                        }))
+                                      }
+                                    />
+                                    <span>{awayTeam?.name || '---'}</span>
+                                    <button
+                                      className="ghost"
+                                      onClick={() => saveMatch(match.id)}
+                                    >
+                                      Confirmar resultado
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+
+                    <h3>Tabla de posiciones</h3>
+                    <div className="groups-grid">
+                      {tournamentState.groups.map((group) => {
+                        const groupTeamIds = tournamentState.groupTeams
+                          .filter((entry) => entry.group_id === group.id)
+                          .map((entry) => entry.team_id);
+                        const groupTeamsList = groupTeamIds
+                          .map((id) =>
+                            tournamentState.teams.find((team) => team.id === id)
+                          )
+                          .filter(Boolean);
+                        const groupMatches = tournamentState.matches.filter(
+                          (match) => match.group_id === group.id
+                        );
+                        const standings = buildStandings(
+                          groupTeamsList,
+                          groupMatches
+                        );
+                        return (
+                          <div className="group-card" key={group.id}>
+                            <h4>{group.name}</h4>
+                            <div className="table compact">
+                              <div className="table-row header">
+                                <span>Equipo</span>
+                                <span>V</span>
+                                <span>D</span>
+                                <span>Dif</span>
+                                <span>PF</span>
+                                <span>PC</span>
+                              </div>
+                              {standings.map((entry) => (
+                                <div className="table-row" key={entry.team.id}>
+                                  <span className="table-cell" data-label="Equipo">
+                                    {entry.team.name || 'Equipo'}
+                                  </span>
+                                  <span className="table-cell" data-label="V">
+                                    {entry.wins}
+                                  </span>
+                                  <span className="table-cell" data-label="D">
+                                    {entry.losses}
+                                  </span>
+                                  <span className="table-cell" data-label="Dif">
+                                    {entry.diff}
+                                  </span>
+                                  <span className="table-cell" data-label="PF">
+                                    {entry.pointsFor}
+                                  </span>
+                                  <span className="table-cell" data-label="PC">
+                                    {entry.pointsAgainst}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <button className="primary" onClick={createBracket} disabled={!allDone}>
+                      Continuar a llaves
+                    </button>
+                    {!allDone && (
+                      <p className="note">
+                        Completa todos los resultados antes de continuar.
+                      </p>
+                    )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {tournamentState.tournament.stage === 'playoffs' && (
+                  <div className="tournament-step">
+                    <h3>Llave final</h3>
+                    <div className="bracket">
+                      {[...new Set(
+                        tournamentState.bracketMatches
+                          .filter((match) => match.bracket_type === 'main')
+                          .map((match) => match.round_index)
+                      )]
+                        .sort((a, b) => a - b)
+                        .map((roundIndex) => {
+                          const roundMatches = tournamentState.bracketMatches.filter(
+                            (match) =>
+                              match.bracket_type === 'main' &&
+                              match.round_index === roundIndex
+                          );
+                          return (
+                            <div className="round-card" key={roundIndex}>
+                              <h5>Ronda {roundIndex}</h5>
+                              {roundMatches.map((match) => {
+                                const homeTeam = tournamentState.teams.find(
+                                  (team) => team.id === match.home_team_id
+                                );
+                                const awayTeam = tournamentState.teams.find(
+                                  (team) => team.id === match.away_team_id
+                                );
+                                return (
+                                  <div className="match-row" key={match.id}>
+                                    <span>{homeTeam?.name || '---'}</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={
+                                        bracketInputs[match.id]?.home ??
+                                        match.home_score ??
+                                        ''
+                                      }
+                                      onChange={(event) =>
+                                        setBracketInputs((prev) => ({
+                                          ...prev,
+                                          [match.id]: {
+                                            ...prev[match.id],
+                                            home: event.target.value
+                                          }
+                                        }))
+                                      }
+                                    />
+                                    <span>vs</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={
+                                        bracketInputs[match.id]?.away ??
+                                        match.away_score ??
+                                        ''
+                                      }
+                                      onChange={(event) =>
+                                        setBracketInputs((prev) => ({
+                                          ...prev,
+                                          [match.id]: {
+                                            ...prev[match.id],
+                                            away: event.target.value
+                                          }
+                                        }))
+                                      }
+                                    />
+                                    <span>{awayTeam?.name || '---'}</span>
+                                    <button
+                                      className="ghost"
+                                      onClick={() => saveBracketMatch(match.id)}
+                                    >
+                                      Confirmar resultado
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                    </div>
+
+                    <div className="round-card">
+                      <h5>3er puesto</h5>
+                      {tournamentState.bracketMatches
+                        .filter((match) => match.bracket_type === 'third_place')
+                        .map((match) => {
+                          const homeTeam = tournamentState.teams.find(
+                            (team) => team.id === match.home_team_id
+                          );
+                          const awayTeam = tournamentState.teams.find(
+                            (team) => team.id === match.away_team_id
+                          );
+                          return (
+                            <div className="match-row" key={match.id}>
+                              <span>{homeTeam?.name || '---'}</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={
+                                  bracketInputs[match.id]?.home ??
+                                  match.home_score ??
+                                  ''
+                                }
+                                onChange={(event) =>
+                                  setBracketInputs((prev) => ({
+                                    ...prev,
+                                    [match.id]: {
+                                      ...prev[match.id],
+                                      home: event.target.value
+                                    }
+                                  }))
+                                }
+                              />
+                              <span>vs</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={
+                                  bracketInputs[match.id]?.away ??
+                                  match.away_score ??
+                                  ''
+                                }
+                                onChange={(event) =>
+                                  setBracketInputs((prev) => ({
+                                    ...prev,
+                                    [match.id]: {
+                                      ...prev[match.id],
+                                      away: event.target.value
+                                    }
+                                  }))
+                                }
+                              />
+                              <span>{awayTeam?.name || '---'}</span>
+                              <button
+                                className="ghost"
+                                onClick={() => saveBracketMatch(match.id)}
+                              >
+                                Confirmar resultado
+                              </button>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

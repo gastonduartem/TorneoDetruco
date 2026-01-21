@@ -565,6 +565,38 @@ app.post('/api/admin/tournament/bracket', requireAuth, async (req, res) => {
     return res.status(500).json({ message: 'No se pudo crear la llave.' });
   }
 
+  const { data: mainMatches } = await supabase
+    .from('tournament_bracket_matches')
+    .select('*')
+    .eq('tournament_id', tournament.id)
+    .eq('bracket_type', 'main');
+
+  const maxRound = Math.max(...mainMatches.map((item) => item.round_index));
+  for (const match of mainMatches) {
+    const hasHome = Boolean(match.home_team_id);
+    const hasAway = Boolean(match.away_team_id);
+    if (match.winner_team_id || (hasHome && hasAway) || (!hasHome && !hasAway)) {
+      continue;
+    }
+    const winnerId = hasHome ? match.home_team_id : match.away_team_id;
+    await supabase
+      .from('tournament_bracket_matches')
+      .update({ winner_team_id: winnerId })
+      .eq('id', match.id);
+
+    if (match.round_index < maxRound) {
+      const nextRound = match.round_index + 1;
+      const nextMatchIndex = Math.floor(match.match_index / 2);
+      const isHome = match.match_index % 2 === 0;
+      await supabase
+        .from('tournament_bracket_matches')
+        .update(isHome ? { home_team_id: winnerId } : { away_team_id: winnerId })
+        .eq('tournament_id', tournament.id)
+        .eq('round_index', nextRound)
+        .eq('match_index', nextMatchIndex);
+    }
+  }
+
   await supabase
     .from('tournaments')
     .update({ stage: 'playoffs' })
