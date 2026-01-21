@@ -368,11 +368,23 @@ footer a {
   font-family: 'Cinzel', serif;
 }
 
-.rules-card ul {
+.rules-section {
+  display: grid;
+  gap: 10px;
+}
+
+.rules-section h2 {
+  margin: 0;
+  font-family: 'Cinzel', serif;
+  font-size: 1.1rem;
+  color: var(--gold-strong);
+}
+
+.rules-section ul {
   margin: 0;
   padding-left: 18px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .admin-actions {

@@ -513,13 +513,58 @@ function RulesPage() {
     <main className="rules-page">
       <div className="rules-card">
         <h1>Reglas del torneo</h1>
-        <ul>
-          <li>La inscripcion es individual y los equipos se sortean en el lugar.</li>
-          <li>Presentar comprobante de pago para validar la inscripcion.</li>
-          <li>Respetar horarios y llamados del organizador.</li>
-          <li>Fair play y respeto entre participantes.</li>
-          <li>Las decisiones del organizador son finales.</li>
-        </ul>
+        <section className="rules-section">
+          <h2>Modalidad del torneo</h2>
+          <ul>
+            <li>Equipos de 3 jugadores.</li>
+            <li>Fase de grupos + eliminacion.</li>
+          </ul>
+        </section>
+        <section className="rules-section">
+          <h2>Sistema de juego</h2>
+          <ul>
+            <li>Truco clasico.</li>
+            <li>Partidas a 30 puntos.</li>
+            <li>Con flor.</li>
+            <li>
+              En el tongo se suman al tanteador la cantidad de puntos hechos, no
+              se juega a diferencia.
+            </li>
+          </ul>
+        </section>
+        <section className="rules-section">
+          <h2>Fase de grupos</h2>
+          <ul>
+            <li>Los equipos se dividen en grupos.</li>
+            <li>Cada equipo juega contra todos los equipos de su grupo.</li>
+          </ul>
+        </section>
+        <section className="rules-section">
+          <h2>Puntaje</h2>
+          <ul>
+            <li>Partido ganado: +30 puntos.</li>
+            <li>Partido perdido: suma los puntos que haya hecho (ej: 18, 22).</li>
+            <li>No importa por cuanto ganaste, importa cuanto sumaste.</li>
+          </ul>
+        </section>
+        <section className="rules-section">
+          <h2>Clasificacion</h2>
+          <ul>
+            <li>Avanzan a semifinales los 2 primeros de cada grupo.</li>
+            <li>El orden se define por mayor sumatoria de puntos.</li>
+            <li>Si empatan, cuenta el resultado del partido entre ellos.</li>
+          </ul>
+        </section>
+        <section className="rules-section">
+          <h2>Semifinales y final</h2>
+          <ul>
+            <li>Semifinales: 1° vs 2°.</li>
+            <li>Partidos a 30 puntos.</li>
+            <li>Eliminacion directa.</li>
+            <li>El que pierde queda afuera.</li>
+            <li>Desde esta fase, el tongo ya es a diferencia.</li>
+          </ul>
+        </section>
         <a className="map-button" href="/">
           Volver al inicio
         </a>
