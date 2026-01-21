@@ -70,7 +70,7 @@ app.post('/api/admin/login', (req, res) => {
 app.get('/api/admin/inscriptions', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('inscriptions')
-    .select('id, name, phone, created_at')
+    .select('id, name, phone, paid, created_at')
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -119,6 +119,26 @@ app.delete('/api/admin/inscriptions/:id', requireAuth, async (req, res) => {
 
   if (error) {
     return res.status(500).json({ message: 'No se pudo eliminar la inscripcion.' });
+  }
+
+  return res.json({ ok: true });
+});
+
+app.post('/api/admin/inscriptions/:id/paid', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const { paid } = req.body || {};
+
+  if (typeof paid !== 'boolean') {
+    return res.status(400).json({ message: 'Estado de pago invalido.' });
+  }
+
+  const { error } = await supabase
+    .from('inscriptions')
+    .update({ paid })
+    .eq('id', id);
+
+  if (error) {
+    return res.status(500).json({ message: 'No se pudo actualizar el pago.' });
   }
 
   return res.json({ ok: true });

@@ -40,25 +40,20 @@ function TournamentInfo() {
           <strong>Fecha limite de inscripcion:</strong> 1 de febrero
         </li>
         <li>
-          <strong>Precio:</strong> 100.000 Gs
+          <strong>Precio:</strong> 120.000 Gs
         </li>
         <li>
-          <strong>Lugar:</strong> Casa de Gaston
+          <strong>Lugar:</strong> A definir
         </li>
         <li>
           <strong>Premios:</strong> Para los ganadores
         </li>
       </ul>
-      <a
-        className="map-button"
-        href="https://maps.app.goo.gl/pLiHkuyurYKmGhZy7"
-        target="_blank"
-        rel="noreferrer"
-      >
-        Ver ubicacion
+      <a className="map-button">
+        📍 Ubicacion a definir
       </a>
       <a className="map-button secondary" href="/reglas">
-        Reglas del torneo
+        📖 Reglas del torneo
       </a>
     </div>
   );
@@ -320,6 +315,41 @@ function AdminPage() {
     }
   }, [token]);
 
+  const handlePaidToggle = useCallback(
+    async (id, paid) => {
+      if (!token) return;
+      setStatus({ type: 'loading', message: 'Actualizando pago...' });
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/admin/inscriptions/${id}/paid`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ paid })
+          }
+        );
+
+        if (!response.ok) {
+          const info = await response.json().catch(() => ({}));
+          throw new Error(info?.message || 'No se pudo actualizar el pago.');
+        }
+
+        setInscriptions((prev) =>
+          prev.map((item) =>
+            item.id === id ? { ...item, paid } : item
+          )
+        );
+        setStatus({ type: 'success', message: '' });
+      } catch (error) {
+        setStatus({ type: 'error', message: error.message });
+      }
+    },
+    [token]
+  );
+
   const handleDelete = useCallback(
     async (id) => {
       if (!token) return;
@@ -410,6 +440,7 @@ function AdminPage() {
             <div className="table-row header">
               <span>Nombre</span>
               <span>Numero</span>
+              <span>Pago</span>
               <span>Acciones</span>
             </div>
             {inscriptions.map((item) => (
@@ -420,6 +451,16 @@ function AdminPage() {
                 <span className="table-cell" data-label="Numero">
                   {item.phone}
                 </span>
+                <label className="paid-toggle table-cell" data-label="Pago">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(item.paid)}
+                    onChange={(event) =>
+                      handlePaidToggle(item.id, event.target.checked)
+                    }
+                  />
+                  <span>{item.paid ? 'Pagado' : 'Pendiente'}</span>
+                </label>
                 <button
                   type="button"
                   className="tag-button table-cell danger"
@@ -445,8 +486,9 @@ function RulesPage() {
         <section className="rules-section">
           <h2>Modalidad del torneo</h2>
           <ul>
-            <li>Equipos de 3 jugadores.</li>
+            <li>Equipos de 2 jugadores.</li>
             <li>Fase de grupos + eliminacion.</li>
+            <li>Duplas a ser sorteadas en el lugar.</li>
           </ul>
         </section>
         <section className="rules-section">
@@ -455,10 +497,6 @@ function RulesPage() {
             <li>Truco clasico.</li>
             <li>Partidas a 30 puntos.</li>
             <li>Con flor.</li>
-            <li>
-              En el tongo se suman al tanteador la cantidad de puntos hechos, no
-              se juega a diferencia.
-            </li>
           </ul>
         </section>
         <section className="rules-section">
@@ -471,23 +509,23 @@ function RulesPage() {
         <section className="rules-section">
           <h2>Puntaje</h2>
           <ul>
-            <li>Partido ganado: +30 puntos.</li>
-            <li>Partido perdido: suma los puntos que haya hecho (ej: 18, 22).</li>
-            <li>No importa por cuanto ganaste, importa cuanto sumaste.</li>
+            <li>Partido ganado: +1 puntos.</li>
+            <li>Partido perdido: 0 puntos.</li>
           </ul>
         </section>
         <section className="rules-section">
           <h2>Clasificacion</h2>
           <ul>
             <li>Avanzan a semifinales los 2 primeros de cada grupo.</li>
-            <li>El orden se define por mayor sumatoria de puntos.</li>
+            <li>El orden se define por mayor diferencia de puntos.</li>
             <li>Si empatan, cuenta el resultado del partido entre ellos.</li>
           </ul>
         </section>
         <section className="rules-section">
           <h2>Semifinales y final</h2>
           <ul>
-            <li>Semifinales: 1° vs 2°.</li>
+            <li>Semifinales: 1° vs 4°, 2° vs 3°</li>
+            <li>(Depende de la cantidad de equipos)</li>
             <li>Partidos a 30 puntos.</li>
             <li>Eliminacion directa.</li>
             <li>El que pierde queda afuera.</li>
