@@ -517,7 +517,11 @@ function RulesPage() {
           <h2>Clasificación</h2>
           <ul>
             <li>Avanzan a la fase final los 2, 3 o 4 primeros de cada grupo (dependiendo de la cantidad de participantes).</li>
-
+            <li>Clasifican <strong>uno menos</strong> que el tamaño del grupo.</li>
+            <li>Si los grupos son desparejos, clasifican la <strong>misma cantidad</strong> en todos:</li>
+                  <ul>
+                    <li>Ejemplo: grupos de 4 y 5 → clasifican 3 de cada grupo.</li>
+                  </ul>
             <li>
               <strong>Orden de clasificación</strong>
               <ol>
@@ -554,18 +558,6 @@ function RulesPage() {
         <section className="rules-section">
           <h2>Fase final</h2>
           <ul>
-            <li>
-              <strong>Clasificación</strong>
-              <ul>
-                <li>Clasifican <strong>uno menos</strong> que el tamaño del grupo.</li>
-                <li>
-                  Si los grupos son desparejos, clasifican la <strong>misma cantidad</strong> en todos:
-                  <ul>
-                    <li>Ejemplo: grupos de 4 y 5 → clasifican 3 de cada grupo.</li>
-                  </ul>
-                </li>
-              </ul>
-            </li>
             <li>
               <strong>Eliminación</strong>
               <ul>
