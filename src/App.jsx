@@ -132,6 +132,19 @@ const buildBracketMatches = (groupRankings) => {
   return matches;
 };
 
+const getAvailableParticipants = (state) => {
+  if (!state?.participants || !state?.teams || !state?.tournament) return [];
+  const assignedIds = new Set();
+  state.teams.forEach((team) => {
+    if (team.head_participant_id) assignedIds.add(team.head_participant_id);
+    if (team.second_participant_id) assignedIds.add(team.second_participant_id);
+  });
+  if (state.tournament.pending_member_id) {
+    assignedIds.add(state.tournament.pending_member_id);
+  }
+  return state.participants.filter((participant) => !assignedIds.has(participant.id));
+};
+
 function LandingHeader() {
   return (
     <header className="site-header">
@@ -389,6 +402,10 @@ function AdminPage() {
   const [groupChoice, setGroupChoice] = useState(null);
   const [matchInputs, setMatchInputs] = useState({});
   const [bracketInputs, setBracketInputs] = useState({});
+  const [wheelRotation, setWheelRotation] = useState(0);
+  const [wheelItems, setWheelItems] = useState([]);
+  const [spinning, setSpinning] = useState(false);
+  const spinDuration = 2400;
 
   const handleLogin = async (event) => {
     event.preventDefault();
@@ -462,6 +479,7 @@ function AdminPage() {
             )
           : null
       );
+      setWheelItems(getAvailableParticipants(data));
       setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
@@ -490,6 +508,7 @@ function AdminPage() {
             )
           : null
       );
+      setWheelItems(getAvailableParticipants(data));
       setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
@@ -514,6 +533,9 @@ function AdminPage() {
       setGroupChoice(null);
       setMatchInputs({});
       setBracketInputs({});
+      setWheelItems([]);
+      setWheelRotation(0);
+      setSpinning(false);
       setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
@@ -522,6 +544,13 @@ function AdminPage() {
 
   const drawHead = useCallback(async () => {
     if (!token) return;
+    if (spinning) return;
+    const available = getAvailableParticipants(tournamentState);
+    if (!available.length) {
+      setStatus({ type: 'error', message: 'No hay participantes disponibles.' });
+      return;
+    }
+    setWheelItems(available);
     setStatus({ type: 'loading', message: 'Girando ruleta...' });
     try {
       const response = await fetch(`${API_BASE}/api/admin/tournament/draw-head`, {
@@ -532,17 +561,39 @@ function AdminPage() {
       if (!response.ok) {
         throw new Error(data?.message || 'No se pudo girar.');
       }
-      setTournamentState(data);
-      setLastDraw(data.lastDraw || null);
-      setPendingMember(null);
+      const picked = data.lastDraw;
+      const index = available.findIndex((item) => item.id === picked?.id);
+      if (index >= 0) {
+        const angle = 360 / available.length;
+        const centerAngle = angle * index + angle / 2;
+        const targetRotation = wheelRotation + 1080 + (270 - centerAngle);
+        setSpinning(true);
+        setWheelRotation(targetRotation);
+        setTimeout(() => {
+          setTournamentState(data);
+          setLastDraw(picked || null);
+          setPendingMember(null);
+          setSpinning(false);
+        }, spinDuration);
+      } else {
+        setTournamentState(data);
+        setLastDraw(picked || null);
+      }
       setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     }
-  }, [token]);
+  }, [token, spinning, tournamentState, wheelRotation]);
 
   const drawSecond = useCallback(async () => {
     if (!token) return;
+    if (spinning) return;
+    const available = getAvailableParticipants(tournamentState);
+    if (!available.length) {
+      setStatus({ type: 'error', message: 'No hay participantes disponibles.' });
+      return;
+    }
+    setWheelItems(available);
     setStatus({ type: 'loading', message: 'Girando ruleta...' });
     try {
       const response = await fetch(
@@ -556,13 +607,28 @@ function AdminPage() {
       if (!response.ok) {
         throw new Error(data?.message || 'No se pudo girar.');
       }
-      setTournamentState(data);
-      setPendingMember(data.pending || null);
+      const picked = data.pending;
+      const index = available.findIndex((item) => item.id === picked?.id);
+      if (index >= 0) {
+        const angle = 360 / available.length;
+        const centerAngle = angle * index + angle / 2;
+        const targetRotation = wheelRotation + 1080 + (270 - centerAngle);
+        setSpinning(true);
+        setWheelRotation(targetRotation);
+        setTimeout(() => {
+          setTournamentState(data);
+          setPendingMember(picked || null);
+          setSpinning(false);
+        }, spinDuration);
+      } else {
+        setTournamentState(data);
+        setPendingMember(picked || null);
+      }
       setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     }
-  }, [token]);
+  }, [token, spinning, tournamentState, wheelRotation]);
 
   const confirmTeam = useCallback(async () => {
     if (!token) return;
@@ -588,6 +654,7 @@ function AdminPage() {
             )
           : null
       );
+      setWheelItems(getAvailableParticipants(data));
       setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
@@ -709,6 +776,36 @@ function AdminPage() {
     },
     [token, bracketInputs]
   );
+
+  const displayedWheelItems = spinning
+    ? wheelItems
+    : getAvailableParticipants(tournamentState);
+
+  const wheelColors = [
+    '#f6c56b',
+    '#f08c5e',
+    '#6fbf8f',
+    '#6586d4',
+    '#d585b6',
+    '#f2a65a'
+  ];
+  const wheelStyle =
+    displayedWheelItems.length > 0
+      ? {
+          background: `conic-gradient(${displayedWheelItems
+            .map(
+              (_, index) =>
+                `${wheelColors[index % wheelColors.length]} ${
+                  (index * 360) / displayedWheelItems.length
+                }deg ${((index + 1) * 360) / displayedWheelItems.length}deg`
+            )
+            .join(', ')})`,
+          transform: `rotate(${wheelRotation}deg)`,
+          transition: spinning
+            ? `transform ${spinDuration}ms cubic-bezier(0.2, 0.8, 0.2, 1)`
+            : 'none'
+        }
+      : { transform: `rotate(${wheelRotation}deg)` };
 
   const createBracket = useCallback(async () => {
     if (!token || !tournamentState?.tournament) return;
@@ -1004,9 +1101,36 @@ function AdminPage() {
                   <div className="tournament-step">
                     <h3>Sorteo de cabezas</h3>
                     <p>Gira la ruleta para asignar las cabezas de equipo.</p>
-                    <button className="primary" onClick={drawHead}>
-                      Girar ruleta
-                    </button>
+                    <div className="roulette">
+                      <div className="wheel-wrap">
+                        <div className="wheel-pointer" />
+                        <div className="wheel" style={wheelStyle}>
+                          {displayedWheelItems.map((participant, index) => {
+                            const angle =
+                              (index * 360) / displayedWheelItems.length +
+                              360 / displayedWheelItems.length / 2;
+                            return (
+                              <span
+                                key={participant.id}
+                                className="wheel-label"
+                                style={{
+                                  transform: `rotate(${angle}deg) translateY(-45%) rotate(-${angle}deg)`
+                                }}
+                              >
+                                {participant.name}
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <button
+                          className="wheel-button"
+                          onClick={drawHead}
+                          disabled={spinning || displayedWheelItems.length === 0}
+                        >
+                          Girar
+                        </button>
+                      </div>
+                    </div>
                     {lastDraw && (
                       <div className="highlight-card">
                         {lastDraw.name} seleccionado
@@ -1033,9 +1157,36 @@ function AdminPage() {
                   <div className="tournament-step">
                     <h3>Segundo integrante</h3>
                     <p>Gira la ruleta y confirmá el equipo.</p>
-                    <button className="primary" onClick={drawSecond}>
-                      Girar ruleta
-                    </button>
+                    <div className="roulette">
+                      <div className="wheel-wrap">
+                        <div className="wheel-pointer" />
+                        <div className="wheel" style={wheelStyle}>
+                          {displayedWheelItems.map((participant, index) => {
+                            const angle =
+                              (index * 360) / displayedWheelItems.length +
+                              360 / displayedWheelItems.length / 2;
+                            return (
+                              <span
+                                key={participant.id}
+                                className="wheel-label"
+                                style={{
+                                  transform: `rotate(${angle}deg) translateY(-45%) rotate(-${angle}deg)`
+                                }}
+                              >
+                                {participant.name}
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <button
+                          className="wheel-button"
+                          onClick={drawSecond}
+                          disabled={spinning || displayedWheelItems.length === 0}
+                        >
+                          Girar
+                        </button>
+                      </div>
+                    </div>
                     {pendingMember && (
                       <div className="highlight-card">
                         {pendingMember.name} seleccionado
