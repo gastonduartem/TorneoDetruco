@@ -514,12 +514,41 @@ function RulesPage() {
           </ul>
         </section>
         <section className="rules-section">
-          <h2>Clasificacion</h2>
+          <h2>Clasificación</h2>
           <ul>
-            <li>Avanzan a la fase final los 2, 3 o 4 primeros de cada grupo.</li>
-            <li>(Dependiendo de la cantidad de participantes)</li>
-            <li>El orden se define por mayor diferencia de puntos.</li>
-            <li>Si empatan, cuenta el resultado del partido entre ellos.</li>
+            <li>Avanzan a la fase final los 2, 3 o 4 primeros de cada grupo (dependiendo de la cantidad de participantes).</li>
+
+            <li>
+              <strong>Orden de clasificación</strong>
+              <ol>
+                <li>Mayor cantidad de victorias.</li>
+                <li>
+                  Si hay empate en victorias, se desempata por:
+                  <ol>
+                    <li>Mayor diferencia de puntos (puntos a favor - puntos en contra).</li>
+                    <li>
+                      Si persiste el empate:
+                      <ul>
+                        <li>
+                          <strong>Empate entre 2 equipos:</strong>
+                          <ul>
+                            <li>Resultado del partido entre ambos (pasa el ganador).</li>
+                          </ul>
+                        </li>
+
+                        <li>
+                          <strong>Empate entre 3 equipos o más:</strong>
+                          <ol>
+                            <li>Mayor cantidad de puntos a favor.</li>
+                            <li>Si sigue el empate, menor cantidad de puntos en contra.</li>
+                          </ol>
+                        </li>
+                      </ul>
+                    </li>
+                  </ol>
+                </li>
+              </ol>
+            </li>
           </ul>
         </section>
         <section className="rules-section">
@@ -529,8 +558,6 @@ function RulesPage() {
             <li>(Depende de la cantidad de equipos)</li>
             <li>Partidos a 30 puntos.</li>
             <li>Eliminacion directa.</li>
-            <li>El que pierde queda afuera.</li>
-            <li>Desde esta fase, el tongo ya es a diferencia.</li>
           </ul>
         </section>
         <a className="map-button" href="/">
