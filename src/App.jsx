@@ -516,7 +516,7 @@ function RulesPage() {
         <section className="rules-section">
           <h2>Clasificacion</h2>
           <ul>
-            <li>Avanzan a semifinales los 2, 3 o 4 primeros de cada grupo.</li>
+            <li>Avanzan a la fase final los 2, 3 o 4 primeros de cada grupo.</li>
             <li>(Dependiendo de la cantidad de participantes)</li>
             <li>El orden se define por mayor diferencia de puntos.</li>
             <li>Si empatan, cuenta el resultado del partido entre ellos.</li>
