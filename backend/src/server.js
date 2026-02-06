@@ -225,7 +225,7 @@ app.post('/api/admin/tournament/start', requireAuth, async (req, res) => {
 
   const { data: tournament, error: tournamentError } = await supabase
     .from('tournaments')
-    .insert({ stage: 'heads', current_head_index: 0 })
+    .insert({ stage: 'pairs', current_head_index: 0 })
     .select('*')
     .single();
 
@@ -270,13 +270,17 @@ app.post('/api/admin/tournament/draw-head', requireAuth, async (req, res) => {
   const state = await getTournamentState();
   const { tournament, participants, teams } = state;
 
-  if (!tournament || tournament.stage !== 'heads') {
-    return res.status(400).json({ message: 'El torneo no esta en etapa de cabezas.' });
+  if (!tournament || !['pairs', 'heads', 'seconds'].includes(tournament.stage)) {
+    return res.status(400).json({ message: 'El torneo no esta en etapa de equipos.' });
+  }
+
+  if (tournament.pending_member_id) {
+    return res.status(400).json({ message: 'Falta confirmar el segundo integrante.' });
   }
 
   const usedIds = new Set(
     teams
-      .map((team) => team.head_participant_id)
+      .flatMap((team) => [team.head_participant_id, team.second_participant_id])
       .filter(Boolean)
   );
 
@@ -297,14 +301,10 @@ app.post('/api/admin/tournament/draw-head', requireAuth, async (req, res) => {
     .from('tournament_teams')
     .update({ head_participant_id: picked.id })
     .eq('id', nextTeam.id);
-
-  const remainingHeads = teams.filter((team) => !team.head_participant_id).length - 1;
-  if (remainingHeads <= 0) {
-    await supabase
-      .from('tournaments')
-      .update({ stage: 'seconds', current_head_index: 0 })
-      .eq('id', tournament.id);
-  }
+  await supabase
+    .from('tournaments')
+    .update({ current_head_index: teams.findIndex((team) => team.id === nextTeam.id) })
+    .eq('id', tournament.id);
 
   const updated = await getTournamentState();
   return res.json({ ...updated, lastDraw: picked });
@@ -314,8 +314,8 @@ app.post('/api/admin/tournament/draw-second', requireAuth, async (req, res) => {
   const state = await getTournamentState();
   const { tournament, participants, teams } = state;
 
-  if (!tournament || tournament.stage !== 'seconds') {
-    return res.status(400).json({ message: 'El torneo no esta en etapa de segundos.' });
+  if (!tournament || !['pairs', 'heads', 'seconds'].includes(tournament.stage)) {
+    return res.status(400).json({ message: 'El torneo no esta en etapa de equipos.' });
   }
 
   if (tournament.pending_member_id) {
@@ -323,6 +323,11 @@ app.post('/api/admin/tournament/draw-second', requireAuth, async (req, res) => {
       (participant) => participant.id === tournament.pending_member_id
     );
     return res.json({ ...state, pending });
+  }
+
+  const currentTeam = teams[tournament.current_head_index];
+  if (!currentTeam || !currentTeam.head_participant_id) {
+    return res.status(400).json({ message: 'Falta el primer integrante.' });
   }
 
   const usedIds = new Set(
@@ -353,12 +358,17 @@ app.post('/api/admin/tournament/select-second', requireAuth, async (req, res) =>
   const state = await getTournamentState();
   const { tournament, participants, teams } = state;
 
-  if (!tournament || tournament.stage !== 'seconds') {
-    return res.status(400).json({ message: 'El torneo no esta en etapa de segundos.' });
+  if (!tournament || !['pairs', 'heads', 'seconds'].includes(tournament.stage)) {
+    return res.status(400).json({ message: 'El torneo no esta en etapa de equipos.' });
   }
 
   if (!participantId) {
     return res.status(400).json({ message: 'Falta el participante.' });
+  }
+
+  const currentTeam = teams[tournament.current_head_index];
+  if (!currentTeam || !currentTeam.head_participant_id) {
+    return res.status(400).json({ message: 'Falta el primer integrante.' });
   }
 
   const usedIds = new Set(
@@ -366,10 +376,6 @@ app.post('/api/admin/tournament/select-second', requireAuth, async (req, res) =>
       .flatMap((team) => [team.head_participant_id, team.second_participant_id])
       .filter(Boolean)
   );
-
-  if (tournament.pending_member_id) {
-    usedIds.add(tournament.pending_member_id);
-  }
 
   if (usedIds.has(participantId)) {
     return res.status(400).json({ message: 'Participante no disponible.' });
@@ -405,8 +411,8 @@ app.post('/api/admin/tournament/next-team', requireAuth, async (req, res) => {
   const state = await getTournamentState();
   const { tournament, teams } = state;
 
-  if (!tournament || tournament.stage !== 'seconds') {
-    return res.status(400).json({ message: 'El torneo no esta en etapa de segundos.' });
+  if (!tournament || !['pairs', 'heads', 'seconds'].includes(tournament.stage)) {
+    return res.status(400).json({ message: 'El torneo no esta en etapa de equipos.' });
   }
 
   const nextIndex = findNextTeamIndex(teams, tournament.current_head_index);
@@ -424,8 +430,8 @@ app.post('/api/admin/tournament/confirm-team', requireAuth, async (req, res) => 
   const state = await getTournamentState();
   const { tournament, participants, teams } = state;
 
-  if (!tournament || tournament.stage !== 'seconds') {
-    return res.status(400).json({ message: 'El torneo no esta en etapa de segundos.' });
+  if (!tournament || !['pairs', 'heads', 'seconds'].includes(tournament.stage)) {
+    return res.status(400).json({ message: 'El torneo no esta en etapa de equipos.' });
   }
 
   if (!tournament.pending_member_id) {
@@ -456,7 +462,7 @@ app.post('/api/admin/tournament/confirm-team', requireAuth, async (req, res) => 
     .update({
       pending_member_id: null,
       current_head_index: remainingSeconds > 0 ? nextIndex : 0,
-      stage: remainingSeconds > 0 ? 'seconds' : 'groups'
+      stage: remainingSeconds > 0 ? 'pairs' : 'groups'
     })
     .eq('id', tournament.id);
 
