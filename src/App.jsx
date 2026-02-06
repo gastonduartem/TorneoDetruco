@@ -995,10 +995,13 @@ function AdminPage() {
     const completeTeams = getCompleteTeams(tournamentState);
     if (!groupSlots.length && completeTeams.length) {
       const half = Math.floor(completeTeams.length / 2);
-      const slots = [
-        ...Array.from({ length: half }, () => 'A'),
-        ...Array.from({ length: completeTeams.length - half }, () => 'B')
-      ];
+      const slots = [];
+      const aCount = half;
+      const bCount = completeTeams.length - half;
+      for (let i = 0; i < Math.max(aCount, bCount); i += 1) {
+        if (i < aCount) slots.push('A');
+        if (i < bCount) slots.push('B');
+      }
       setGroupSlots(slots);
       setGroupWheelItems(slots);
       setGroupWheelRotation(0);
@@ -1518,6 +1521,15 @@ function AdminPage() {
                           const assignedIds = new Set(
                             groupAssignmentOrder.map((entry) => entry.teamId)
                           );
+                          const teamsById = Object.fromEntries(
+                            completeTeams.map((team) => [team.id, team])
+                          );
+                          const groupA = groupAssignmentOrder
+                            .filter((entry) => entry.label === 'A')
+                            .map((entry) => teamsById[entry.teamId]?.name || '---');
+                          const groupB = groupAssignmentOrder
+                            .filter((entry) => entry.label === 'B')
+                            .map((entry) => teamsById[entry.teamId]?.name || '---');
                           const remainingTeams = completeTeams.filter(
                             (team) => !assignedIds.has(team.id)
                           );
@@ -1536,6 +1548,26 @@ function AdminPage() {
                               <p>
                                 Quedan {remainingTeams.length} equipos por asignar.
                               </p>
+                              <div className="groups-grid">
+                                <div className="group-card">
+                                  <h4>Grupo A</h4>
+                                  <ul>
+                                    {groupA.length === 0 && <li>---</li>}
+                                    {groupA.map((name, index) => (
+                                      <li key={`ga-${index}`}>{name}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                <div className="group-card">
+                                  <h4>Grupo B</h4>
+                                  <ul>
+                                    {groupB.length === 0 && <li>---</li>}
+                                    {groupB.map((name, index) => (
+                                      <li key={`gb-${index}`}>{name}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
                               <button
                                 className="primary"
                                 onClick={confirmGroupDraw}
