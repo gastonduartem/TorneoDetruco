@@ -132,14 +132,14 @@ const buildBracketMatches = (groupRankings) => {
   return matches;
 };
 
-const getAvailableParticipants = (state) => {
+const getAvailableParticipants = (state, { includePending = false } = {}) => {
   if (!state?.participants || !state?.teams || !state?.tournament) return [];
   const assignedIds = new Set();
   state.teams.forEach((team) => {
     if (team.head_participant_id) assignedIds.add(team.head_participant_id);
     if (team.second_participant_id) assignedIds.add(team.second_participant_id);
   });
-  if (state.tournament.pending_member_id) {
+  if (state.tournament.pending_member_id && !includePending) {
     assignedIds.add(state.tournament.pending_member_id);
   }
   return state.participants.filter((participant) => !assignedIds.has(participant.id));
@@ -412,6 +412,7 @@ function AdminPage() {
   const [wheelItems, setWheelItems] = useState([]);
   const [spinning, setSpinning] = useState(false);
   const [manualSecondId, setManualSecondId] = useState('');
+  const [showManualSecond, setShowManualSecond] = useState(false);
   const [groupSlots, setGroupSlots] = useState([]);
   const [groupWheelRotation, setGroupWheelRotation] = useState(0);
   const [groupWheelItems, setGroupWheelItems] = useState([]);
@@ -492,7 +493,13 @@ function AdminPage() {
             )
           : null
       );
-      setWheelItems(getAvailableParticipants(data));
+      setWheelItems(
+        getAvailableParticipants(data, {
+          includePending: ['pairs', 'heads', 'seconds'].includes(
+            data.tournament?.stage
+          )
+        })
+      );
       setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
@@ -521,7 +528,13 @@ function AdminPage() {
             )
           : null
       );
-      setWheelItems(getAvailableParticipants(data));
+      setWheelItems(
+        getAvailableParticipants(data, {
+          includePending: ['pairs', 'heads', 'seconds'].includes(
+            data.tournament?.stage
+          )
+        })
+      );
       setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
@@ -550,6 +563,7 @@ function AdminPage() {
       setWheelRotation(0);
       setSpinning(false);
       setManualSecondId('');
+      setShowManualSecond(false);
       setGroupSlots([]);
       setGroupWheelRotation(0);
       setGroupWheelItems([]);
@@ -608,7 +622,9 @@ function AdminPage() {
   const drawSecond = useCallback(async () => {
     if (!token) return;
     if (spinning) return;
-    const available = getAvailableParticipants(tournamentState);
+    const available = getAvailableParticipants(tournamentState, {
+      includePending: true
+    });
     if (!available.length) {
       setStatus({ type: 'error', message: 'No hay participantes disponibles.' });
       return;
@@ -666,6 +682,7 @@ function AdminPage() {
         throw new Error(data?.message || 'No se pudo confirmar.');
       }
       setTournamentState(data);
+      setLastDraw(null);
       setPendingMember(
         data.tournament?.pending_member_id
           ? data.participants.find(
@@ -674,8 +691,15 @@ function AdminPage() {
             )
           : null
       );
-      setWheelItems(getAvailableParticipants(data));
+      setWheelItems(
+        getAvailableParticipants(data, {
+          includePending: ['pairs', 'heads', 'seconds'].includes(
+            data.tournament?.stage
+          )
+        })
+      );
       setManualSecondId('');
+      setShowManualSecond(false);
       setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
@@ -710,8 +734,15 @@ function AdminPage() {
             )
           : null
       );
-      setWheelItems(getAvailableParticipants(data));
+      setWheelItems(
+        getAvailableParticipants(data, {
+          includePending: ['pairs', 'heads', 'seconds'].includes(
+            data.tournament?.stage
+          )
+        })
+      );
       setManualSecondId('');
+      setShowManualSecond(false);
       setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
@@ -851,7 +882,11 @@ function AdminPage() {
 
   const displayedWheelItems = spinning
     ? wheelItems
-    : getAvailableParticipants(tournamentState);
+    : getAvailableParticipants(tournamentState, {
+        includePending: ['pairs', 'heads', 'seconds'].includes(
+          tournamentState?.tournament?.stage
+        )
+      });
   const displayedGroupSlots = groupSpinning ? groupWheelItems : groupSlots;
 
   const wheelColors = [
@@ -1250,10 +1285,12 @@ function AdminPage() {
                   </button>
                 </div>
 
-                {tournamentState.tournament.stage === 'heads' && (
+                {['pairs', 'heads', 'seconds'].includes(
+                  tournamentState.tournament.stage
+                ) && (
                   <div className="tournament-step">
-                    <h3>Sorteo de cabezas</h3>
-                    <p>Gira la ruleta para asignar las cabezas de equipo.</p>
+                    <h3>Sorteo de equipos</h3>
+                    <p>Gira la ruleta para elegir los integrantes del equipo.</p>
                     <div className="roulette">
                       <div className="wheel-wrap">
                         <div className="wheel-pointer" />
@@ -1275,96 +1312,73 @@ function AdminPage() {
                             );
                           })}
                         </div>
-                        <button
-                          className="wheel-button"
-                          onClick={drawHead}
-                          disabled={spinning || displayedWheelItems.length === 0}
-                        >
-                          Girar
-                        </button>
-                      </div>
-                    </div>
-                    {lastDraw && (
-                      <div className="highlight-card">
-                        {lastDraw.name} seleccionado
-                      </div>
-                    )}
-                    <div className="team-list">
-                      {tournamentState.teams.map((team) => {
-                        const head = tournamentState.participants.find(
-                          (participant) =>
-                            participant.id === team.head_participant_id
-                        );
-                        return (
-                          <div className="team-item" key={team.id}>
-                            <span>Equipo {team.seed_index + 1}</span>
-                            <strong>{head ? head.name : '---'}</strong>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                        {(() => {
+                          const currentTeam =
+                            tournamentState.teams[
+                              tournamentState.tournament.current_head_index
+                            ];
+                          const head = currentTeam
+                            ? tournamentState.participants.find(
+                                (participant) =>
+                                  participant.id === currentTeam.head_participant_id
+                              )
+                            : null;
+                          const hasHead = Boolean(head);
+                          const canSpin =
+                            displayedWheelItems.length > 0 &&
+                            !spinning &&
+                            !pendingMember;
+                          const drawLabel = hasHead
+                            ? 'Girar (2do integrante)'
+                            : 'Girar (1er integrante)';
+                          const handleSpin = () => {
+                            if (hasHead) {
+                              drawSecond();
+                            } else {
+                              drawHead();
+                            }
+                          };
 
-                {tournamentState.tournament.stage === 'seconds' && (
-                  <div className="tournament-step">
-                    <h3>Segundo integrante</h3>
-                    <p>Gira la ruleta y confirmá el equipo.</p>
-                    <div className="roulette roulette-grid">
-                      <div className="wheel-wrap">
-                        <div className="wheel-pointer" />
-                        <div className="wheel" style={wheelStyle}>
-                          {displayedWheelItems.map((participant, index) => {
-                            const angle =
-                              (index * 360) / displayedWheelItems.length +
-                              360 / displayedWheelItems.length / 2;
-                            return (
-                              <span
-                                key={participant.id}
-                                className="wheel-label"
-                                style={{
-                                  transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(calc(-1 * var(--wheel-radius))) rotate(-${angle}deg)`
-                                }}
-                              >
-                                {participant.name}
-                              </span>
-                            );
-                          })}
-                        </div>
-                        <button
-                          className="wheel-button"
-                          onClick={drawSecond}
-                          disabled={spinning || displayedWheelItems.length === 0}
-                        >
-                          Girar
-                        </button>
-                      </div>
-                      <div className="roulette-panel">
-                        <h4>Elegir dupla</h4>
-                        <p>Seleccioná el segundo integrante manualmente.</p>
-                        <label>
-                          Disponible
-                          <select
-                            value={manualSecondId}
-                            onChange={(event) => setManualSecondId(event.target.value)}
-                          >
-                            <option value="">Seleccionar...</option>
-                            {displayedWheelItems.map((participant) => (
-                              <option key={participant.id} value={participant.id}>
-                                {participant.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <button
-                          className="ghost"
-                          onClick={selectSecond}
-                          disabled={!manualSecondId || spinning}
-                        >
-                          Elegir dupla
-                        </button>
+                          return (
+                            <button
+                              className="wheel-button"
+                              onClick={handleSpin}
+                              disabled={!canSpin}
+                            >
+                              {drawLabel}
+                            </button>
+                          );
+                        })()}
                       </div>
                     </div>
+                    {(() => {
+                      const currentTeam =
+                        tournamentState.teams[
+                          tournamentState.tournament.current_head_index
+                        ];
+                      const head = currentTeam
+                        ? tournamentState.participants.find(
+                            (participant) =>
+                              participant.id === currentTeam.head_participant_id
+                          )
+                        : null;
+                      const hasHead = Boolean(head);
+
+                      return (
+                        <>
+                          {lastDraw && !hasHead && (
+                            <div className="highlight-card">
+                              {lastDraw.name} seleccionado
+                            </div>
+                          )}
+                          {head && (
+                            <div className="highlight-card">
+                              1er integrante: {head.name}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                     {pendingMember && (
                       <div className="highlight-card">
                         {pendingMember.name} seleccionado
@@ -1386,10 +1400,40 @@ function AdminPage() {
                           <button className="primary" onClick={confirmTeam}>
                             Confirmar equipo
                           </button>
-                          <button className="ghost" onClick={nextTeam}>
-                            Pasar al siguiente equipo
+                          <button
+                            className="ghost"
+                            onClick={() => setShowManualSecond((prev) => !prev)}
+                          >
+                            Elegir otra persona
                           </button>
                         </div>
+                        {showManualSecond && (
+                          <div className="roulette-panel">
+                            <label>
+                              Disponible
+                              <select
+                                value={manualSecondId}
+                                onChange={(event) =>
+                                  setManualSecondId(event.target.value)
+                                }
+                              >
+                                <option value="">Seleccionar...</option>
+                                {displayedWheelItems.map((participant) => (
+                                  <option key={participant.id} value={participant.id}>
+                                    {participant.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <button
+                              className="ghost"
+                              onClick={selectSecond}
+                              disabled={!manualSecondId || spinning}
+                            >
+                              Confirmar nueva dupla
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="team-list">
