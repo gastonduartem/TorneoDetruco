@@ -1342,8 +1342,8 @@ function AdminPage() {
                             !spinning &&
                             !pendingMember;
                           const drawLabel = hasHead
-                            ? 'Girar (2do integrante)'
-                            : 'Girar (1er integrante)';
+                            ? 'Girar'
+                            : 'Girar';
                           const handleSpin = () => {
                             if (hasHead) {
                               drawSecond();
