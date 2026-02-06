@@ -348,6 +348,47 @@ app.post('/api/admin/tournament/draw-second', requireAuth, async (req, res) => {
   return res.json({ ...updated, pending: picked });
 });
 
+app.post('/api/admin/tournament/select-second', requireAuth, async (req, res) => {
+  const { participantId } = req.body || {};
+  const state = await getTournamentState();
+  const { tournament, participants, teams } = state;
+
+  if (!tournament || tournament.stage !== 'seconds') {
+    return res.status(400).json({ message: 'El torneo no esta en etapa de segundos.' });
+  }
+
+  if (!participantId) {
+    return res.status(400).json({ message: 'Falta el participante.' });
+  }
+
+  const usedIds = new Set(
+    teams
+      .flatMap((team) => [team.head_participant_id, team.second_participant_id])
+      .filter(Boolean)
+  );
+
+  if (tournament.pending_member_id) {
+    usedIds.add(tournament.pending_member_id);
+  }
+
+  if (usedIds.has(participantId)) {
+    return res.status(400).json({ message: 'Participante no disponible.' });
+  }
+
+  const picked = participants.find((participant) => participant.id === participantId);
+  if (!picked) {
+    return res.status(404).json({ message: 'Participante no encontrado.' });
+  }
+
+  await supabase
+    .from('tournaments')
+    .update({ pending_member_id: participantId })
+    .eq('id', tournament.id);
+
+  const updated = await getTournamentState();
+  return res.json({ ...updated, pending: picked });
+});
+
 const findNextTeamIndex = (teams, startIndex) => {
   if (!teams.length) return 0;
   const total = teams.length;
@@ -424,7 +465,7 @@ app.post('/api/admin/tournament/confirm-team', requireAuth, async (req, res) => 
 });
 
 app.post('/api/admin/tournament/groups', requireAuth, async (req, res) => {
-  const { groupCount } = req.body || {};
+  const { groupCount, assignments } = req.body || {};
   const state = await getTournamentState();
   const { tournament, teams } = state;
 
@@ -458,16 +499,46 @@ app.post('/api/admin/tournament/groups', requireAuth, async (req, res) => {
   }
 
   const groupAssignments = [];
-  shuffledTeams.forEach((team, index) => {
-    const groupIndex = index % groupCount;
-    const slotIndex = Math.floor(index / groupCount);
-    groupAssignments.push({
-      tournament_id: tournament.id,
-      group_id: createdGroups[groupIndex].id,
-      team_id: team.id,
-      slot_index: slotIndex
+  if (Array.isArray(assignments) && assignments.length > 0) {
+    const validTeamIds = new Set(completeTeams.map((team) => team.id));
+    const seen = new Set();
+    for (const assignment of assignments) {
+      if (!validTeamIds.has(assignment.teamId)) {
+        return res.status(400).json({ message: 'Equipo invalido en sorteo.' });
+      }
+      if (seen.has(assignment.teamId)) {
+        return res.status(400).json({ message: 'Equipo repetido en sorteo.' });
+      }
+      if (
+        assignment.groupIndex === undefined ||
+        assignment.groupIndex < 0 ||
+        assignment.groupIndex >= groupCount
+      ) {
+        return res.status(400).json({ message: 'Grupo invalido en sorteo.' });
+      }
+      seen.add(assignment.teamId);
+      groupAssignments.push({
+        tournament_id: tournament.id,
+        group_id: createdGroups[assignment.groupIndex].id,
+        team_id: assignment.teamId,
+        slot_index: assignment.slotIndex ?? 0
+      });
+    }
+    if (seen.size !== completeTeams.length) {
+      return res.status(400).json({ message: 'Faltan equipos por asignar.' });
+    }
+  } else {
+    shuffledTeams.forEach((team, index) => {
+      const groupIndex = index % groupCount;
+      const slotIndex = Math.floor(index / groupCount);
+      groupAssignments.push({
+        tournament_id: tournament.id,
+        group_id: createdGroups[groupIndex].id,
+        team_id: team.id,
+        slot_index: slotIndex
+      });
     });
-  });
+  }
 
   const { error: assignmentError } = await supabase
     .from('tournament_group_teams')
