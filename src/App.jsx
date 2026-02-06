@@ -600,7 +600,9 @@ function AdminPage() {
       if (index >= 0) {
         const angle = 360 / available.length;
         const centerAngle = angle * index + angle / 2;
-        const targetRotation = wheelRotation + 1080 + (360 - centerAngle);
+        const currentOffset = ((wheelRotation % 360) + 360) % 360;
+        const targetRotation =
+          wheelRotation + 1080 + (360 - centerAngle - currentOffset);
         setSpinning(true);
         setWheelRotation(targetRotation);
         setTimeout(() => {
@@ -619,7 +621,7 @@ function AdminPage() {
     }
   }, [token, spinning, tournamentState, wheelRotation]);
 
-  const drawSecond = useCallback(async () => {
+  const drawSecond = useCallback(async (force = false) => {
     if (!token) return;
     if (spinning) return;
     const available = getAvailableParticipants(tournamentState, {
@@ -636,7 +638,11 @@ function AdminPage() {
         `${API_BASE}/api/admin/tournament/draw-second`,
         {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}` }
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ force })
         }
       );
       const data = await response.json();
@@ -648,7 +654,9 @@ function AdminPage() {
       if (index >= 0) {
         const angle = 360 / available.length;
         const centerAngle = angle * index + angle / 2;
-        const targetRotation = wheelRotation + 1080 + (360 - centerAngle);
+        const currentOffset = ((wheelRotation % 360) + 360) % 360;
+        const targetRotation =
+          wheelRotation + 1080 + (360 - centerAngle - currentOffset);
         setSpinning(true);
         setWheelRotation(targetRotation);
         setTimeout(() => {
@@ -949,7 +957,9 @@ function AdminPage() {
     const index = Math.floor(Math.random() * groupSlots.length);
     const angle = 360 / groupSlots.length;
     const centerAngle = angle * index + angle / 2;
-    const targetRotation = groupWheelRotation + 1080 + (360 - centerAngle);
+    const currentOffset = ((groupWheelRotation % 360) + 360) % 360;
+    const targetRotation =
+      groupWheelRotation + 1080 + (360 - centerAngle - currentOffset);
     const selectedLabel = groupSlots[index];
     setGroupSpinning(true);
     setGroupWheelRotation(targetRotation);
@@ -1399,6 +1409,13 @@ function AdminPage() {
                         <div className="button-row">
                           <button className="primary" onClick={confirmTeam}>
                             Confirmar equipo
+                          </button>
+                          <button
+                            className="ghost"
+                            onClick={() => drawSecond(true)}
+                            disabled={spinning}
+                          >
+                            Girar de nuevo
                           </button>
                           <button
                             className="ghost"
