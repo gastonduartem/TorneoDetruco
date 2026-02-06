@@ -600,7 +600,7 @@ function AdminPage() {
       if (index >= 0) {
         const angle = 360 / available.length;
         const centerAngle = angle * index + angle / 2;
-        const targetRotation = wheelRotation + 1080 + (270 - centerAngle);
+        const targetRotation = wheelRotation + 1080 + (360 - centerAngle);
         setSpinning(true);
         setWheelRotation(targetRotation);
         setTimeout(() => {
@@ -648,7 +648,7 @@ function AdminPage() {
       if (index >= 0) {
         const angle = 360 / available.length;
         const centerAngle = angle * index + angle / 2;
-        const targetRotation = wheelRotation + 1080 + (270 - centerAngle);
+        const targetRotation = wheelRotation + 1080 + (360 - centerAngle);
         setSpinning(true);
         setWheelRotation(targetRotation);
         setTimeout(() => {
@@ -949,7 +949,7 @@ function AdminPage() {
     const index = Math.floor(Math.random() * groupSlots.length);
     const angle = 360 / groupSlots.length;
     const centerAngle = angle * index + angle / 2;
-    const targetRotation = groupWheelRotation + 1080 + (270 - centerAngle);
+    const targetRotation = groupWheelRotation + 1080 + (360 - centerAngle);
     const selectedLabel = groupSlots[index];
     setGroupSpinning(true);
     setGroupWheelRotation(targetRotation);
