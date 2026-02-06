@@ -313,12 +313,13 @@ app.post('/api/admin/tournament/draw-head', requireAuth, async (req, res) => {
 app.post('/api/admin/tournament/draw-second', requireAuth, async (req, res) => {
   const state = await getTournamentState();
   const { tournament, participants, teams } = state;
+  const { force } = req.body || {};
 
   if (!tournament || !['pairs', 'heads', 'seconds'].includes(tournament.stage)) {
     return res.status(400).json({ message: 'El torneo no esta en etapa de equipos.' });
   }
 
-  if (tournament.pending_member_id) {
+  if (tournament.pending_member_id && !force) {
     const pending = participants.find(
       (participant) => participant.id === tournament.pending_member_id
     );
@@ -335,6 +336,10 @@ app.post('/api/admin/tournament/draw-second', requireAuth, async (req, res) => {
       .flatMap((team) => [team.head_participant_id, team.second_participant_id])
       .filter(Boolean)
   );
+
+  if (tournament.pending_member_id) {
+    usedIds.add(tournament.pending_member_id);
+  }
 
   const available = participants.filter((participant) => !usedIds.has(participant.id));
 
