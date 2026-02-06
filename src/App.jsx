@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
@@ -143,6 +143,13 @@ const getAvailableParticipants = (state) => {
     assignedIds.add(state.tournament.pending_member_id);
   }
   return state.participants.filter((participant) => !assignedIds.has(participant.id));
+};
+
+const getCompleteTeams = (state) => {
+  if (!state?.teams) return [];
+  return state.teams.filter(
+    (team) => team.head_participant_id && team.second_participant_id
+  );
 };
 
 function LandingHeader() {
@@ -399,12 +406,18 @@ function AdminPage() {
   const [tournamentState, setTournamentState] = useState(null);
   const [lastDraw, setLastDraw] = useState(null);
   const [pendingMember, setPendingMember] = useState(null);
-  const [groupChoice, setGroupChoice] = useState(null);
   const [matchInputs, setMatchInputs] = useState({});
   const [bracketInputs, setBracketInputs] = useState({});
   const [wheelRotation, setWheelRotation] = useState(0);
   const [wheelItems, setWheelItems] = useState([]);
   const [spinning, setSpinning] = useState(false);
+  const [manualSecondId, setManualSecondId] = useState('');
+  const [groupSlots, setGroupSlots] = useState([]);
+  const [groupWheelRotation, setGroupWheelRotation] = useState(0);
+  const [groupWheelItems, setGroupWheelItems] = useState([]);
+  const [groupSpinning, setGroupSpinning] = useState(false);
+  const [groupAssignmentOrder, setGroupAssignmentOrder] = useState([]);
+  const [lastGroupDraw, setLastGroupDraw] = useState(null);
   const spinDuration = 2400;
 
   const handleLogin = async (event) => {
@@ -536,6 +549,13 @@ function AdminPage() {
       setWheelItems([]);
       setWheelRotation(0);
       setSpinning(false);
+      setManualSecondId('');
+      setGroupSlots([]);
+      setGroupWheelRotation(0);
+      setGroupWheelItems([]);
+      setGroupSpinning(false);
+      setGroupAssignmentOrder([]);
+      setLastGroupDraw(null);
       setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
@@ -655,11 +675,48 @@ function AdminPage() {
           : null
       );
       setWheelItems(getAvailableParticipants(data));
+      setManualSecondId('');
       setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     }
   }, [token]);
+
+  const selectSecond = useCallback(async () => {
+    if (!token || !manualSecondId) return;
+    setStatus({ type: 'loading', message: 'Asignando dupla...' });
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/admin/tournament/select-second`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ participantId: manualSecondId })
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'No se pudo asignar la dupla.');
+      }
+      setTournamentState(data);
+      setPendingMember(
+        data.tournament?.pending_member_id
+          ? data.participants.find(
+              (participant) =>
+                participant.id === data.tournament.pending_member_id
+            )
+          : null
+      );
+      setWheelItems(getAvailableParticipants(data));
+      setManualSecondId('');
+      setStatus({ type: 'success', message: '' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+  }, [manualSecondId, token]);
 
   const nextTeam = useCallback(async () => {
     if (!token) return;
@@ -680,9 +737,24 @@ function AdminPage() {
     }
   }, [token]);
 
-  const drawGroups = useCallback(async () => {
-    if (!token || !groupChoice) return;
-    setStatus({ type: 'loading', message: 'Sorteando grupos...' });
+  const confirmGroupDraw = useCallback(async () => {
+    if (!token || !tournamentState?.tournament) return;
+    const completeTeams = getCompleteTeams(tournamentState);
+    if (groupAssignmentOrder.length !== completeTeams.length) {
+      setStatus({ type: 'error', message: 'Faltan equipos por asignar.' });
+      return;
+    }
+    const slotsByLabel = { A: 0, B: 0 };
+    const assignments = groupAssignmentOrder.map((entry) => {
+      const slotIndex = slotsByLabel[entry.label] ?? 0;
+      slotsByLabel[entry.label] = slotIndex + 1;
+      return {
+        teamId: entry.teamId,
+        groupIndex: entry.label === 'A' ? 0 : 1,
+        slotIndex
+      };
+    });
+    setStatus({ type: 'loading', message: 'Creando grupos...' });
     try {
       const response = await fetch(`${API_BASE}/api/admin/tournament/groups`, {
         method: 'POST',
@@ -690,18 +762,18 @@ function AdminPage() {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ groupCount: groupChoice })
+        body: JSON.stringify({ groupCount: 2, assignments })
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.message || 'No se pudieron sortear grupos.');
+        throw new Error(data?.message || 'No se pudieron crear grupos.');
       }
       setTournamentState(data);
       setStatus({ type: 'success', message: '' });
     } catch (error) {
       setStatus({ type: 'error', message: error.message });
     }
-  }, [token, groupChoice]);
+  }, [groupAssignmentOrder, token, tournamentState]);
 
   const saveMatch = useCallback(
     async (matchId) => {
@@ -780,6 +852,7 @@ function AdminPage() {
   const displayedWheelItems = spinning
     ? wheelItems
     : getAvailableParticipants(tournamentState);
+  const displayedGroupSlots = groupSpinning ? groupWheelItems : groupSlots;
 
   const wheelColors = [
     '#f6c56b',
@@ -806,6 +879,86 @@ function AdminPage() {
             : 'none'
         }
       : { transform: `rotate(${wheelRotation}deg)` };
+
+  const groupWheelStyle =
+    displayedGroupSlots.length > 0
+      ? {
+          background: `conic-gradient(${displayedGroupSlots
+            .map(
+              (_, index) =>
+                `${wheelColors[index % wheelColors.length]} ${
+                  (index * 360) / displayedGroupSlots.length
+                }deg ${((index + 1) * 360) / displayedGroupSlots.length}deg`
+            )
+            .join(', ')})`,
+          transform: `rotate(${groupWheelRotation}deg)`,
+          transition: groupSpinning
+            ? `transform ${spinDuration}ms cubic-bezier(0.2, 0.8, 0.2, 1)`
+            : 'none'
+        }
+      : { transform: `rotate(${groupWheelRotation}deg)` };
+
+  const drawGroupSlot = useCallback(() => {
+    if (!tournamentState?.tournament || groupSpinning) return;
+    const completeTeams = getCompleteTeams(tournamentState);
+    const assignedIds = new Set(groupAssignmentOrder.map((entry) => entry.teamId));
+    const remainingTeams = completeTeams.filter((team) => !assignedIds.has(team.id));
+    const currentTeam = remainingTeams[0];
+    if (!currentTeam) return;
+    if (!groupSlots.length) {
+      setStatus({ type: 'error', message: 'No hay grupos disponibles.' });
+      return;
+    }
+    setGroupWheelItems(groupSlots);
+    setStatus({ type: 'loading', message: 'Girando ruleta...' });
+    const index = Math.floor(Math.random() * groupSlots.length);
+    const angle = 360 / groupSlots.length;
+    const centerAngle = angle * index + angle / 2;
+    const targetRotation = groupWheelRotation + 1080 + (270 - centerAngle);
+    const selectedLabel = groupSlots[index];
+    setGroupSpinning(true);
+    setGroupWheelRotation(targetRotation);
+    setTimeout(() => {
+      setGroupAssignmentOrder((prev) => [
+        ...prev,
+        { teamId: currentTeam.id, label: selectedLabel }
+      ]);
+      setGroupSlots((prev) => prev.filter((_, idx) => idx !== index));
+      setLastGroupDraw(selectedLabel);
+      setGroupSpinning(false);
+      setStatus({ type: 'success', message: '' });
+    }, spinDuration);
+  }, [
+    groupAssignmentOrder,
+    groupSlots,
+    groupSpinning,
+    groupWheelRotation,
+    spinDuration,
+    tournamentState
+  ]);
+
+  useEffect(() => {
+    if (!tournamentState?.tournament || tournamentState.tournament.stage !== 'groups') {
+      setGroupSlots([]);
+      setGroupWheelRotation(0);
+      setGroupWheelItems([]);
+      setGroupSpinning(false);
+      setGroupAssignmentOrder([]);
+      setLastGroupDraw(null);
+      return;
+    }
+    const completeTeams = getCompleteTeams(tournamentState);
+    if (!groupSlots.length && completeTeams.length) {
+      const half = Math.floor(completeTeams.length / 2);
+      const slots = [
+        ...Array.from({ length: half }, () => 'A'),
+        ...Array.from({ length: completeTeams.length - half }, () => 'B')
+      ];
+      setGroupSlots(slots);
+      setGroupWheelItems(slots);
+      setGroupWheelRotation(0);
+    }
+  }, [groupSlots.length, tournamentState]);
 
   const createBracket = useCallback(async () => {
     if (!token || !tournamentState?.tournament) return;
@@ -1114,7 +1267,7 @@ function AdminPage() {
                                 key={participant.id}
                                 className="wheel-label"
                                 style={{
-                                  transform: `rotate(${angle}deg) translateY(-45%) rotate(-${angle}deg)`
+                                  transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(calc(-1 * var(--wheel-radius))) rotate(-${angle}deg)`
                                 }}
                               >
                                 {participant.name}
@@ -1157,7 +1310,7 @@ function AdminPage() {
                   <div className="tournament-step">
                     <h3>Segundo integrante</h3>
                     <p>Gira la ruleta y confirmá el equipo.</p>
-                    <div className="roulette">
+                    <div className="roulette roulette-grid">
                       <div className="wheel-wrap">
                         <div className="wheel-pointer" />
                         <div className="wheel" style={wheelStyle}>
@@ -1170,7 +1323,7 @@ function AdminPage() {
                                 key={participant.id}
                                 className="wheel-label"
                                 style={{
-                                  transform: `rotate(${angle}deg) translateY(-45%) rotate(-${angle}deg)`
+                                  transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(calc(-1 * var(--wheel-radius))) rotate(-${angle}deg)`
                                 }}
                               >
                                 {participant.name}
@@ -1184,6 +1337,31 @@ function AdminPage() {
                           disabled={spinning || displayedWheelItems.length === 0}
                         >
                           Girar
+                        </button>
+                      </div>
+                      <div className="roulette-panel">
+                        <h4>Elegir dupla</h4>
+                        <p>Seleccioná el segundo integrante manualmente.</p>
+                        <label>
+                          Disponible
+                          <select
+                            value={manualSecondId}
+                            onChange={(event) => setManualSecondId(event.target.value)}
+                          >
+                            <option value="">Seleccionar...</option>
+                            {displayedWheelItems.map((participant) => (
+                              <option key={participant.id} value={participant.id}>
+                                {participant.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          className="ghost"
+                          onClick={selectSecond}
+                          disabled={!manualSecondId || spinning}
+                        >
+                          Elegir dupla
                         </button>
                       </div>
                     </div>
@@ -1240,24 +1418,78 @@ function AdminPage() {
 
                 {tournamentState.tournament.stage === 'groups' && (
                   <div className="tournament-step">
-                    <h3>Cantidad de grupos</h3>
-                    <div className="button-row">
-                      {[2, 3, 4].map((count) => (
+                    <h3>Sorteo de grupos</h3>
+                    <p>Asigna cada equipo al Grupo A o Grupo B.</p>
+                    <div className="roulette roulette-grid">
+                      <div className="wheel-wrap">
+                        <div className="wheel-pointer" />
+                        <div className="wheel" style={groupWheelStyle}>
+                          {displayedGroupSlots.map((slot, index) => {
+                            const angle =
+                              (index * 360) / displayedGroupSlots.length +
+                              360 / displayedGroupSlots.length / 2;
+                            return (
+                              <span
+                                key={`${slot}-${index}`}
+                                className="wheel-label"
+                                style={{
+                                  transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(calc(-1 * var(--wheel-radius))) rotate(-${angle}deg)`
+                                }}
+                              >
+                                {slot}
+                              </span>
+                            );
+                          })}
+                        </div>
                         <button
-                          key={count}
-                          className={`ghost ${groupChoice === count ? 'active' : ''}`}
-                          onClick={() => setGroupChoice(count)}
+                          className="wheel-button"
+                          onClick={drawGroupSlot}
+                          disabled={
+                            groupSpinning || displayedGroupSlots.length === 0
+                          }
                         >
-                          {count} grupos
+                          Girar
                         </button>
-                      ))}
-                      <button
-                        className="primary"
-                        onClick={drawGroups}
-                        disabled={!groupChoice}
-                      >
-                        Sortear grupos
-                      </button>
+                      </div>
+                      <div className="roulette-panel">
+                        {(() => {
+                          const completeTeams = getCompleteTeams(tournamentState);
+                          const assignedIds = new Set(
+                            groupAssignmentOrder.map((entry) => entry.teamId)
+                          );
+                          const remainingTeams = completeTeams.filter(
+                            (team) => !assignedIds.has(team.id)
+                          );
+                          const currentTeam = remainingTeams[0];
+                          return (
+                            <>
+                              <h4>Equipo actual</h4>
+                              <div className="highlight-card">
+                                {currentTeam?.name || '---'}
+                              </div>
+                              {lastGroupDraw && (
+                                <div className="highlight-card">
+                                  Grupo {lastGroupDraw} seleccionado
+                                </div>
+                              )}
+                              <p>
+                                Quedan {remainingTeams.length} equipos por asignar.
+                              </p>
+                              <button
+                                className="primary"
+                                onClick={confirmGroupDraw}
+                                disabled={
+                                  remainingTeams.length > 0 ||
+                                  groupAssignmentOrder.length !== completeTeams.length ||
+                                  groupSpinning
+                                }
+                              >
+                                Confirmar grupos
+                              </button>
+                            </>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </div>
                 )}
